@@ -1,0 +1,1928 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Workout Tracker</title>
+
+  <!-- PWA / iPhone meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gym Tracker">
+  <meta name="theme-color" content="#0a0a0f">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Icon for Add to Home Screen -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0a0f'/><text y='72' x='50' text-anchor='middle' font-size='60'>🏋️</text></svg>">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { background: #0a0a0f; overflow-x: hidden; }
+    html { overflow-x: hidden; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+  </style>
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Recharts peer dep -->
+  <script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+
+  <!-- Recharts -->
+  <script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+
+  <!-- Babel for JSX transpilation -->
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } = Recharts;
+
+
+// type: "s" = standard (kg+reps), "b" = bodyweight (reps only), "t" = timed (seconds)
+const DEFAULT_EXERCISES = {
+  Pecho: [
+    { id: "bench_press", name: "Press Banca", emoji: "🏋️", type: "s" },
+    { id: "bench_press_db", name: "Press Banca Mancuernas", emoji: "🏋️", type: "s" },
+    { id: "incline_bench", name: "Press Inclinado Barra", emoji: "🏋️", type: "s" },
+    { id: "incline_bench_db", name: "Press Inclinado Mancuernas", emoji: "🏋️", type: "s" },
+    { id: "decline_bench", name: "Press Declinado", emoji: "🏋️", type: "s" },
+    { id: "dumbbell_fly", name: "Aperturas Mancuernas", emoji: "💪", type: "s" },
+    { id: "cable_crossover", name: "Cruce de Poleas", emoji: "🔄", type: "s" },
+    { id: "chest_dip", name: "Fondos en Paralelas", emoji: "⬇️", type: "b" },
+    { id: "pushup", name: "Flexiones", emoji: "🫳", type: "b" },
+    { id: "pike_pushup", name: "Flexiones en Pica", emoji: "🫳", type: "b" },
+    { id: "diamond_pushup", name: "Flexiones Diamante", emoji: "💎", type: "b" },
+    { id: "chest_press_machine", name: "Press en Máquina", emoji: "🏋️", type: "s" },
+    { id: "pec_deck", name: "Pec Deck / Contractora", emoji: "🔄", type: "s" },
+  ],
+  Espalda: [
+    { id: "pullup_pronate", name: "Dominadas Pronadas", emoji: "🔝", type: "b" },
+    { id: "pullup_supinate", name: "Dominadas Supinas", emoji: "🔝", type: "b" },
+    { id: "pullup_neutral", name: "Dominadas Neutras", emoji: "🔝", type: "b" },
+    { id: "weighted_pullup", name: "Dominadas Lastradas", emoji: "🔝", type: "s" },
+    { id: "barbell_row", name: "Remo con Barra", emoji: "🚣", type: "s" },
+    { id: "dumbbell_row", name: "Remo con Mancuerna", emoji: "🚣", type: "s" },
+    { id: "trx_row", name: "Remo en TRX", emoji: "🚣", type: "b" },
+    { id: "lat_pulldown", name: "Jalón al Pecho", emoji: "⬇️", type: "s" },
+    { id: "lat_pulldown_close", name: "Jalón Agarre Cerrado", emoji: "⬇️", type: "s" },
+    { id: "cable_row", name: "Remo en Polea", emoji: "🔄", type: "s" },
+    { id: "t_bar_row", name: "Remo en T", emoji: "🚣", type: "s" },
+    { id: "deadlift", name: "Peso Muerto", emoji: "🏋️", type: "s" },
+    { id: "face_pull", name: "Face Pull", emoji: "🎯", type: "s" },
+    { id: "pullover", name: "Pullover", emoji: "💪", type: "s" },
+    { id: "seal_row", name: "Remo en Banco (Seal Row)", emoji: "🚣", type: "s" },
+  ],
+  Pierna: [
+    { id: "squat", name: "Sentadilla con Barra", emoji: "🦵", type: "s" },
+    { id: "front_squat", name: "Sentadilla Frontal", emoji: "🦵", type: "s" },
+    { id: "goblet_squat", name: "Sentadilla Goblet", emoji: "🦵", type: "s" },
+    { id: "leg_press", name: "Prensa", emoji: "🦿", type: "s" },
+    { id: "hack_squat", name: "Hack Squat", emoji: "🦿", type: "s" },
+    { id: "romanian_deadlift", name: "Peso Muerto Rumano", emoji: "🏋️", type: "s" },
+    { id: "rdl_single_leg", name: "Peso Muerto Rumano a 1 Pierna", emoji: "🏋️", type: "s" },
+    { id: "leg_curl_lying", name: "Curl Femoral Tumbado", emoji: "🦵", type: "s" },
+    { id: "leg_curl_seated", name: "Curl Femoral Sentado", emoji: "🦵", type: "s" },
+    { id: "nordic_curl", name: "Nordic Curl", emoji: "🦵", type: "b" },
+    { id: "leg_extension", name: "Extensión de Cuádriceps", emoji: "🦿", type: "s" },
+    { id: "calf_raise_standing", name: "Gemelo de Pie", emoji: "🦶", type: "s" },
+    { id: "calf_raise_seated", name: "Gemelo Sentado", emoji: "🦶", type: "s" },
+    { id: "hip_thrust", name: "Hip Thrust", emoji: "🍑", type: "s" },
+    { id: "glute_bridge", name: "Glute Bridge", emoji: "🍑", type: "b" },
+    { id: "bulgarian_split", name: "Sentadilla Búlgara", emoji: "🦵", type: "s" },
+    { id: "lunges", name: "Zancadas", emoji: "🦵", type: "s" },
+    { id: "step_up", name: "Step Up", emoji: "🦵", type: "s" },
+    { id: "adductor_machine", name: "Aductores en Máquina", emoji: "🦿", type: "s" },
+    { id: "abductor_machine", name: "Abductores en Máquina", emoji: "🦿", type: "s" },
+  ],
+  Hombro: [
+    { id: "ohp", name: "Press Militar con Barra", emoji: "⬆️", type: "s" },
+    { id: "ohp_db", name: "Press Militar Mancuernas", emoji: "⬆️", type: "s" },
+    { id: "arnold_press", name: "Press Arnold", emoji: "💪", type: "s" },
+    { id: "lateral_raise_db", name: "Elevaciones Laterales Mancuerna", emoji: "🦅", type: "s" },
+    { id: "lateral_raise_cable", name: "Elevaciones Laterales Polea", emoji: "🦅", type: "s" },
+    { id: "front_raise", name: "Elevaciones Frontales", emoji: "🙌", type: "s" },
+    { id: "rear_delt_fly", name: "Pájaro / Rear Delt Fly", emoji: "🦅", type: "s" },
+    { id: "rear_delt_machine", name: "Rear Delt en Máquina", emoji: "🦅", type: "s" },
+    { id: "upright_row", name: "Remo al Mentón", emoji: "⬆️", type: "s" },
+    { id: "shrug", name: "Encogimientos (Shrugs)", emoji: "🤷", type: "s" },
+    { id: "landmine_press", name: "Landmine Press", emoji: "⬆️", type: "s" },
+  ],
+  Bíceps: [
+    { id: "barbell_curl", name: "Curl con Barra", emoji: "💪", type: "s" },
+    { id: "ez_curl", name: "Curl con Barra EZ", emoji: "💪", type: "s" },
+    { id: "dumbbell_curl", name: "Curl Mancuernas", emoji: "💪", type: "s" },
+    { id: "hammer_curl", name: "Curl Martillo", emoji: "🔨", type: "s" },
+    { id: "preacher_curl", name: "Curl en Banco Scott", emoji: "📖", type: "s" },
+    { id: "incline_curl", name: "Curl Inclinado", emoji: "💪", type: "s" },
+    { id: "concentration_curl", name: "Curl Concentrado", emoji: "💪", type: "s" },
+    { id: "cable_curl", name: "Curl en Polea", emoji: "🔄", type: "s" },
+    { id: "spider_curl", name: "Spider Curl", emoji: "🕷️", type: "s" },
+  ],
+  Tríceps: [
+    { id: "tricep_pushdown_rope", name: "Extensión Polea (Cuerda)", emoji: "⬇️", type: "s" },
+    { id: "tricep_pushdown_bar", name: "Extensión Polea (Barra)", emoji: "⬇️", type: "s" },
+    { id: "overhead_ext_db", name: "Extensión Overhead Mancuerna", emoji: "⬆️", type: "s" },
+    { id: "overhead_ext_cable", name: "Extensión Overhead Polea", emoji: "⬆️", type: "s" },
+    { id: "skullcrusher", name: "Press Francés", emoji: "💀", type: "s" },
+    { id: "close_grip_bench", name: "Press Agarre Cerrado", emoji: "🏋️", type: "s" },
+    { id: "tricep_dip", name: "Fondos Tríceps", emoji: "⬇️", type: "b" },
+    { id: "kickback", name: "Kickback", emoji: "💪", type: "s" },
+  ],
+  Core: [
+    { id: "plank", name: "Plancha", emoji: "🧘", type: "t" },
+    { id: "side_plank", name: "Plancha Lateral", emoji: "🧘", type: "t" },
+    { id: "crunch", name: "Crunch", emoji: "🔄", type: "b" },
+    { id: "leg_raise_hanging", name: "Elevación Piernas Colgado", emoji: "🦵", type: "b" },
+    { id: "leg_raise_lying", name: "Elevación Piernas Tumbado", emoji: "🦵", type: "b" },
+    { id: "cable_crunch", name: "Crunch en Polea", emoji: "🔄", type: "s" },
+    { id: "ab_wheel", name: "Rueda Abdominal", emoji: "🛞", type: "b" },
+    { id: "russian_twist", name: "Giros Rusos", emoji: "🔄", type: "b" },
+    { id: "pallof_press", name: "Pallof Press", emoji: "🎯", type: "s" },
+    { id: "dead_bug", name: "Dead Bug", emoji: "🪲", type: "b" },
+    { id: "woodchop", name: "Leñador (Wood Chop)", emoji: "🪓", type: "s" },
+  ],
+  Cardio: [
+    { id: "outdoor_run", name: "Correr Aire Libre", emoji: "🌳", type: "t" },
+    { id: "treadmill", name: "Cinta de Correr", emoji: "🏃", type: "t" },
+    { id: "bike", name: "Bicicleta Estática", emoji: "🚴", type: "t" },
+    { id: "rowing", name: "Remo Ergómetro", emoji: "🚣", type: "t" },
+    { id: "elliptical", name: "Elíptica", emoji: "🏃", type: "t" },
+    { id: "stairmaster", name: "Stairmaster", emoji: "🪜", type: "t" },
+    { id: "jump_rope", name: "Comba", emoji: "⏭️", type: "t" },
+  ],
+};
+
+const CUSTOM_EXERCISES_KEY = "gym-tracker-custom-exercises";
+const STORAGE_KEY = "gym-tracker-data";
+const NUTRITION_KEY = "gym-tracker-nutrition";
+const WEIGHT_KEY = "gym-tracker-weight";
+const NUTRITION_SETTINGS_KEY = "gym-tracker-nutrition-settings";
+
+// ── FOOD DATABASE (per 100g) ──
+const FOOD_DB = [
+  { id: "atun_natural", name: "Atún Natural", group: "Base", cal: 112, prot: 27 },
+  { id: "clara", name: "Clara de huevo", group: "Base", cal: 48, prot: 10.9 },
+  { id: "pechuga_pavo", name: "Pechuga de pavo", group: "Base", cal: 112, prot: 25.1 },
+  { id: "pechuga_pollo", name: "Pechuga pollo", group: "Base", cal: 107, prot: 23.7 },
+  { id: "filete_ternera", name: "Filete ternera", group: "Base", cal: 125, prot: 21.5 },
+  { id: "salmon_ahumado", name: "Salmón Ahumado", group: "Base", cal: 226, prot: 24 },
+  { id: "atun_aceite", name: "Atún Aceite de Oliva", group: "Base", cal: 238, prot: 24 },
+  { id: "jamon_iberico", name: "Jamón Ibérico", group: "Base", cal: 355, prot: 26.9 },
+  { id: "albondigas", name: "Albóndigas", group: "Base", cal: 150, prot: 12 },
+  { id: "pollo_empanado", name: "Pollo empanado", group: "Base", cal: 250, prot: 20 },
+  { id: "ensalada_pasta", name: "Ensalada pasta", group: "Base", cal: 195, prot: 10 },
+  { id: "tortilla_patatas", name: "Tortilla patatas", group: "Base", cal: 180, prot: 6 },
+  { id: "pavo_cocido", name: "Pavo Cocido (Merc)", group: "Picar", cal: 78, prot: 17.8 },
+  { id: "pavo_braseado", name: "Pavo braseado (Camp)", group: "Picar", cal: 86, prot: 17 },
+  { id: "jamon_serrano", name: "Jamón Serrano (Merc)", group: "Picar", cal: 248, prot: 33.5 },
+  { id: "postre_lacteo_dia", name: "Postre Lácteo (DIA)", group: "Lácteos", cal: 53, prot: 9.3 },
+  { id: "queso_fresco_batido", name: "Queso fresco batido GR", group: "Lácteos", cal: 47, prot: 8.5 },
+  { id: "queso_fresco_yogur", name: "Queso fresco batido yogur", group: "Lácteos", cal: 60, prot: 8 },
+  { id: "yogur_desnatado", name: "Yogur desnatado", group: "Lácteos", cal: 46, prot: 5.4 },
+  { id: "mouse_cacao", name: "Mousse Cacao (DIA)", group: "Lácteos", cal: 74, prot: 10 },
+  { id: "yopro", name: "YoPro", group: "Lácteos", cal: 58, prot: 10 },
+  { id: "protein_plus", name: "Protein+", group: "Lácteos", cal: 46, prot: 8 },
+  { id: "protein_straccia", name: "Protein+ Stracciatella", group: "Lácteos", cal: 47, prot: 7.6 },
+  { id: "griego_ligero", name: "Griego Ligero (Merc)", group: "Lácteos", cal: 60, prot: 5.8 },
+  { id: "natillas_choco", name: "Natillas Chocolate (Merc)", group: "Lácteos", cal: 81, prot: 8.4 },
+  { id: "postre_lacteo_merc", name: "Postre Lácteo (Merc)", group: "Lácteos", cal: 52, prot: 10 },
+  { id: "fage", name: "FAGE 0%", group: "Lácteos", cal: 54, prot: 10.3 },
+  { id: "leche_desnatada", name: "Leche Desnatada", group: "Lácteos", cal: 34, prot: 3.2 },
+  { id: "leche_semi", name: "Leche Semidesnatada", group: "Lácteos", cal: 46, prot: 3.1 },
+  { id: "cottage_proteina", name: "Queso Cottage Proteína", group: "Quesos", cal: 80, prot: 15 },
+  { id: "queso_lonchas_arla", name: "Queso Lonchas Arla", group: "Quesos", cal: 186, prot: 34 },
+  { id: "requeson", name: "Requesón", group: "Quesos", cal: 72, prot: 12.2 },
+  { id: "cottage_arla", name: "Queso Cottage Arla", group: "Quesos", cal: 97, prot: 13 },
+  { id: "queso", name: "Queso", group: "Quesos", cal: 400, prot: 25 },
+  { id: "palmito", name: "Palmito", group: "Verdura", cal: 27, prot: 2.4 },
+  { id: "edamame", name: "Edamame", group: "Verdura", cal: 124, prot: 11 },
+  { id: "ensalada", name: "Ensalada variada", group: "Verdura", cal: 18, prot: 0.8 },
+  { id: "brocoli", name: "Brócoli", group: "Verdura", cal: 35, prot: 2 },
+  { id: "gazpacho", name: "Gazpacho", group: "Verdura", cal: 45, prot: 0.8 },
+  { id: "allbran", name: "All Bran", group: "Cereales", cal: 335, prot: 14 },
+  { id: "pan", name: "Pan Artesano", group: "Cereales", cal: 243, prot: 10 },
+  { id: "avena", name: "Avena", group: "Cereales", cal: 372, prot: 10 },
+  { id: "arroz", name: "Arroz", group: "Cereales", cal: 164, prot: 4 },
+  { id: "arroz_integral", name: "Arroz integral", group: "Cereales", cal: 168, prot: 4 },
+  { id: "platano", name: "Plátano", group: "Fruta", cal: 92, prot: 1.1 },
+  { id: "picotas", name: "Picotas", group: "Fruta", cal: 41, prot: 0.75 },
+  { id: "melon", name: "Melón", group: "Fruta", cal: 31, prot: 0.7 },
+  { id: "melocoton", name: "Melocotón", group: "Fruta", cal: 40, prot: 0.7 },
+  { id: "chocolate_70", name: "Chocolate 70%", group: "Otros", cal: 481, prot: 11 },
+  { id: "tomate_frito", name: "Tomate Frito", group: "Otros", cal: 94, prot: 1.2 },
+  { id: "yema_huevo", name: "Yema de huevo", group: "Grasas", cal: 322, prot: 15.86 },
+  { id: "anacardos_nueces", name: "Anacardos/Nueces", group: "Grasas", cal: 600, prot: 18 },
+  { id: "aguacate", name: "Aguacate", group: "Grasas", cal: 160, prot: 2 },
+  { id: "aove", name: "AOVE", group: "Grasas", cal: 900, prot: 0 },
+  { id: "cerveza", name: "Cerveza", group: "Alcohol", cal: 49, prot: 0.4 },
+  { id: "vino", name: "Vino", group: "Alcohol", cal: 80, prot: 0.2 },
+];
+const FOOD_GROUPS = [...new Set(FOOD_DB.map((f) => f.group))];
+
+const TYPE_LABELS = { s: "Peso + Reps", b: "Solo Reps", t: "Tiempo" };
+const TYPE_TAGS = { s: "kg+reps", b: "bodyweight", t: "tiempo" };
+
+const formatDate = (d) => {
+  const date = new Date(d);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Hoy";
+  if (date.toDateString() === yesterday.toDateString()) return "Ayer";
+  return date.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+};
+
+const formatFullDate = (d) =>
+  new Date(d).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+
+const fmtSec = (s) => {
+  const n = Number(s);
+  if (n >= 60) return `${Math.floor(n / 60)}m${n % 60 ? `${n % 60}s` : ""}`;
+  return `${n}s`;
+};
+
+const emptySet = (type) => {
+  if (type === "t") return { seconds: "", done: false };
+  if (type === "b") return { reps: "", done: false };
+  return { weight: "", reps: "", done: false };
+};
+
+const isSetValid = (set, type) => {
+  if (type === "t") return set.done && set.seconds;
+  if (type === "b") return set.done && set.reps;
+  return set.done && set.weight && set.reps;
+};
+
+const formatSetShort = (set, type) => {
+  if (type === "t") return fmtSec(set.seconds);
+  if (type === "b") return `${set.reps} reps`;
+  return `${set.weight}×${set.reps}`;
+};
+
+const formatSetDetail = (set, type) => {
+  if (type === "t") return fmtSec(set.seconds);
+  if (type === "b") return `${set.reps} reps`;
+  return <>{set.weight} kg <span style={{ opacity: 0.5 }}>×</span> {set.reps} reps</>;
+};
+
+function WorkoutTracker() {
+  const [customExercises, setCustomExercises] = useState({});
+  const [workouts, setWorkouts] = useState([]);
+  const [view, setView] = useState("home");
+  const [activeWorkout, setActiveWorkout] = useState(null);
+  const [selectedWorkout, setSelectedWorkout] = useState(null);
+  const [exerciseFilter, setExerciseFilter] = useState(null);
+  const [progressExercise, setProgressExercise] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showNewExercise, setShowNewExercise] = useState(false);
+  const [newExName, setNewExName] = useState("");
+  const [newExGroup, setNewExGroup] = useState("Pecho");
+  const [newExType, setNewExType] = useState("s");
+  const [prevView, setPrevView] = useState("home");
+  const [editingWorkout, setEditingWorkout] = useState(null);
+
+  // ── Nutrition state ──
+  const [nutritionLog, setNutritionLog] = useState({}); // { "2026-02-08": { meals: [...], basalCal: 2000, activityCal: 0 } }
+  const [weightLog, setWeightLog] = useState([]); // [{ date: "2026-02-08", weight: 80 }]
+  const [nutSettings, setNutSettings] = useState({ basalCal: 2000, protTarget: 150 });
+  const [nutDate, setNutDate] = useState(new Date().toISOString().slice(0, 10));
+  const [nutView, setNutView] = useState("summary"); // summary | addMeal | addManual | settings | weightLog
+  const [nutFoodFilter, setNutFoodFilter] = useState(null);
+  const [nutFoodSearch, setNutFoodSearch] = useState("");
+  const [nutSelectedFood, setNutSelectedFood] = useState(null);
+  const [nutGrams, setNutGrams] = useState("100");
+  const [nutManualName, setNutManualName] = useState("");
+  const [nutManualCal, setNutManualCal] = useState("");
+  const [nutManualProt, setNutManualProt] = useState("");
+  const [nutNewWeight, setNutNewWeight] = useState("");
+  const [nutEditingMeal, setNutEditingMeal] = useState(null);
+  const [nutChartFilter, setNutChartFilter] = useState("1m");
+  const [nutShowChart, setNutShowChart] = useState(false);
+
+  const EXERCISES = useMemo(() => {
+    const merged = {};
+    for (const [group, exs] of Object.entries(DEFAULT_EXERCISES)) merged[group] = [...exs];
+    for (const [group, exs] of Object.entries(customExercises)) {
+      if (!merged[group]) merged[group] = [];
+      merged[group].push(...exs);
+    }
+    return merged;
+  }, [customExercises]);
+
+  const ALL_EXERCISES = useMemo(
+    () => Object.entries(EXERCISES).flatMap(([group, exs]) => exs.map((e) => ({ ...e, group }))),
+    [EXERCISES]
+  );
+
+  const getExerciseInfo = (id) => ALL_EXERCISES.find((e) => e.id === id);
+
+  useEffect(() => {
+    (() => {
+      try { const r = localStorage.getItem(STORAGE_KEY); if (r) setWorkouts(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(CUSTOM_EXERCISES_KEY); if (r) setCustomExercises(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(NUTRITION_KEY); if (r) setNutritionLog(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(WEIGHT_KEY); if (r) setWeightLog(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(NUTRITION_SETTINGS_KEY); if (r) setNutSettings(JSON.parse(r)); } catch {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => { if (loaded) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(workouts)); } catch {} } }, [workouts, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(CUSTOM_EXERCISES_KEY, JSON.stringify(customExercises)); } catch {} } }, [customExercises, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_KEY, JSON.stringify(nutritionLog)); } catch {} } }, [nutritionLog, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(WEIGHT_KEY, JSON.stringify(weightLog)); } catch {} } }, [weightLog, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_SETTINGS_KEY, JSON.stringify(nutSettings)); } catch {} } }, [nutSettings, loaded]);
+
+  const startWorkout = () => { setActiveWorkout({ exercises: [], date: new Date().toISOString() }); setView("workout"); };
+
+  // Generic workout state updater — works for both active and editing
+  const getWState = () => editingWorkout ? [editingWorkout, setEditingWorkout] : [activeWorkout, setActiveWorkout];
+
+  const addExerciseToWorkout = (exercise) => {
+    const info = getExerciseInfo(exercise.id) || exercise;
+    const [, setter] = getWState();
+    setter((w) => ({
+      ...w,
+      exercises: [...w.exercises, { exerciseId: exercise.id, sets: [{ ...emptySet(info.type || "s"), done: !!editingWorkout }] }],
+    }));
+    setView(editingWorkout ? "detail" : "workout"); setExerciseFilter(null); setSearchQuery("");
+  };
+
+  const updateSet = (exIdx, setIdx, field, value) => {
+    const [, setter] = getWState();
+    setter((w) => {
+      const exercises = [...w.exercises];
+      const sets = [...exercises[exIdx].sets];
+      sets[setIdx] = { ...sets[setIdx], [field]: value };
+      exercises[exIdx] = { ...exercises[exIdx], sets };
+      return { ...w, exercises };
+    });
+  };
+
+  const toggleSetDone = (exIdx, setIdx) => {
+    const [wk] = getWState();
+    updateSet(exIdx, setIdx, "done", !wk.exercises[exIdx].sets[setIdx].done);
+  };
+
+  const addSet = (exIdx) => {
+    const [, setter] = getWState();
+    setter((w) => {
+      const exercises = [...w.exercises];
+      const info = getExerciseInfo(exercises[exIdx].exerciseId);
+      const lastSet = exercises[exIdx].sets[exercises[exIdx].sets.length - 1];
+      const newS = { ...emptySet(info?.type || "s"), done: !!editingWorkout };
+      if (info?.type === "t") newS.seconds = lastSet?.seconds || "";
+      else if (info?.type === "b") newS.reps = lastSet?.reps || "";
+      else { newS.weight = lastSet?.weight || ""; newS.reps = lastSet?.reps || ""; }
+      exercises[exIdx] = { ...exercises[exIdx], sets: [...exercises[exIdx].sets, newS] };
+      return { ...w, exercises };
+    });
+  };
+
+  const removeSet = (exIdx, setIdx) => {
+    const [, setter] = getWState();
+    setter((w) => {
+      const exercises = [...w.exercises];
+      const sets = exercises[exIdx].sets.filter((_, i) => i !== setIdx);
+      if (sets.length === 0) return { ...w, exercises: exercises.filter((_, i) => i !== exIdx) };
+      exercises[exIdx] = { ...exercises[exIdx], sets };
+      return { ...w, exercises };
+    });
+  };
+
+  const removeExercise = (exIdx) => {
+    const [, setter] = getWState();
+    setter((w) => ({ ...w, exercises: w.exercises.filter((_, i) => i !== exIdx) }));
+  };
+
+  // Edit mode
+  const startEditing = () => {
+    setEditingWorkout(JSON.parse(JSON.stringify(selectedWorkout)));
+  };
+
+  const cancelEditing = () => { setEditingWorkout(null); };
+
+  const saveEditing = () => {
+    if (!editingWorkout) return;
+    const cleaned = {
+      ...editingWorkout,
+      exercises: editingWorkout.exercises
+        .map((ex) => { const info = getExerciseInfo(ex.exerciseId); return { ...ex, sets: ex.sets.filter((s) => isSetValid(s, info?.type || "s")) }; })
+        .filter((ex) => ex.sets.length > 0),
+    };
+    setWorkouts((prev) => prev.map((w) => w.id === cleaned.id ? cleaned : w));
+    setSelectedWorkout(cleaned);
+    setEditingWorkout(null);
+  };
+
+  const finishWorkout = () => {
+    if (!activeWorkout || activeWorkout.exercises.length === 0) { setActiveWorkout(null); setView("home"); return; }
+    const cleaned = {
+      ...activeWorkout, id: Date.now().toString(),
+      exercises: activeWorkout.exercises
+        .map((ex) => { const info = getExerciseInfo(ex.exerciseId); return { ...ex, sets: ex.sets.filter((s) => isSetValid(s, info?.type || "s")) }; })
+        .filter((ex) => ex.sets.length > 0),
+    };
+    if (cleaned.exercises.length > 0) setWorkouts((prev) => [cleaned, ...prev]);
+    setActiveWorkout(null); setView("home");
+  };
+
+  const deleteWorkout = (id) => { setWorkouts((prev) => prev.filter((w) => w.id !== id)); setSelectedWorkout(null); setEditingWorkout(null); setView("history"); };
+
+  const addCustomExercise = () => {
+    if (!newExName.trim()) return;
+    const id = "custom_" + Date.now();
+    setCustomExercises((prev) => {
+      const group = prev[newExGroup] || [];
+      return { ...prev, [newExGroup]: [...group, { id, name: newExName.trim(), emoji: "⭐", type: newExType }] };
+    });
+    setNewExName(""); setShowNewExercise(false);
+  };
+
+  const deleteCustomExercise = (id) => {
+    setCustomExercises((prev) => {
+      const updated = {};
+      for (const [group, exs] of Object.entries(prev)) {
+        const filtered = exs.filter((e) => e.id !== id);
+        if (filtered.length > 0) updated[group] = filtered;
+      }
+      return updated;
+    });
+  };
+
+  const getProgression = (exerciseId) => {
+    const info = getExerciseInfo(exerciseId);
+    const t = info?.type || "s";
+    const data = [];
+    workouts.forEach((w) => {
+      w.exercises.forEach((ex) => {
+        if (ex.exerciseId === exerciseId) {
+          if (t === "t") {
+            const best = ex.sets.reduce((b, s) => Math.max(b, Number(s.seconds || 0)), 0);
+            if (best > 0) data.push({ date: w.date, seconds: best });
+          } else if (t === "b") {
+            const best = ex.sets.reduce((b, s) => Math.max(b, Number(s.reps || 0)), 0);
+            if (best > 0) data.push({ date: w.date, reps: best });
+          } else {
+            const bestSet = ex.sets.reduce((b, s) => {
+              const vol = Number(s.weight) * Number(s.reps);
+              return vol > b.vol ? { ...s, vol } : b;
+            }, { vol: 0 });
+            if (bestSet.vol > 0) data.push({ date: w.date, weight: Number(bestSet.weight), reps: Number(bestSet.reps), volume: bestSet.vol });
+          }
+        }
+      });
+    });
+    return data.reverse();
+  };
+
+  const totalVolume = (workout) =>
+    workout.exercises.reduce((total, ex) => {
+      const info = getExerciseInfo(ex.exerciseId);
+      if (info?.type !== "s") return total;
+      return total + ex.sets.reduce((t, s) => t + Number(s.weight || 0) * Number(s.reps || 0), 0);
+    }, 0);
+
+  const totalSets = (workout) => workout.exercises.reduce((t, ex) => t + ex.sets.length, 0);
+
+  const stats = useMemo(() => {
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    const thisWeek = workouts.filter((w) => new Date(w.date) >= weekAgo);
+    return { totalWorkouts: workouts.length, thisWeek: thisWeek.length, totalVolume: thisWeek.reduce((t, w) => t + totalVolume(w), 0) };
+  }, [workouts]);
+
+  const getPreviousBest = (exerciseId) => {
+    for (const w of workouts) for (const ex of w.exercises) if (ex.exerciseId === exerciseId) return ex.sets;
+    return null;
+  };
+
+  // ─── STYLES ───
+  const C = {
+    bg: "#0a0a0f", card: "#15151e", accent: "#ff6b35",
+    accentDim: "rgba(255,107,53,0.15)", accentGlow: "rgba(255,107,53,0.3)",
+    text: "#f0eff4", textDim: "#8a8a9a", border: "#252535",
+    success: "#34d399", successDim: "rgba(52,211,153,0.15)",
+    danger: "#ef4444", dangerDim: "rgba(239,68,68,0.12)",
+  };
+  const baseCard = { background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: "16px" };
+  const font = "'Space Grotesk', sans-serif";
+  const fontBody = "'DM Sans', sans-serif";
+  const inputStyle = (done) => ({
+    padding: "10px 8px", borderRadius: 10, border: `1px solid ${done ? C.success + "40" : C.border}`,
+    background: done ? C.successDim : "rgba(255,255,255,0.04)", color: C.text,
+    fontSize: 15, textAlign: "center", outline: "none", width: "100%", boxSizing: "border-box", fontWeight: 600,
+  });
+
+  // ═══ SET ROW RENDERER ═══
+  const renderSetRow = (ex, exIdx, set, setIdx) => {
+    const info = getExerciseInfo(ex.exerciseId);
+    const t = info?.type || "s";
+
+    if (t === "t") {
+      return (
+        <div key={setIdx} style={{ display: "grid", gridTemplateColumns: "36px 1fr 44px 32px", gap: 8, marginBottom: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: set.done ? C.success : C.textDim, textAlign: "center" }}>{setIdx + 1}</span>
+          <div style={{ position: "relative" }}>
+            <input type="number" inputMode="numeric" placeholder="0" value={set.seconds}
+              onChange={(e) => updateSet(exIdx, setIdx, "seconds", e.target.value)}
+              style={{ ...inputStyle(set.done), paddingRight: 30 }} />
+            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: C.textDim, pointerEvents: "none" }}>seg</span>
+          </div>
+          <button onClick={() => toggleSetDone(exIdx, setIdx)} style={{
+            width: 44, height: 40, borderRadius: 10, border: `1px solid ${set.done ? C.success : C.border}`,
+            background: set.done ? C.success : "transparent", color: set.done ? "#000" : C.textDim,
+            fontSize: 16, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+          }}>✓</button>
+          <button onClick={() => removeSet(exIdx, setIdx)} style={{
+            width: 32, height: 40, borderRadius: 10, border: "none", background: "transparent", color: C.textDim, fontSize: 16, cursor: "pointer",
+          }}>×</button>
+        </div>
+      );
+    }
+
+    if (t === "b") {
+      return (
+        <div key={setIdx} style={{ display: "grid", gridTemplateColumns: "36px 1fr 44px 32px", gap: 8, marginBottom: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: set.done ? C.success : C.textDim, textAlign: "center" }}>{setIdx + 1}</span>
+          <input type="number" inputMode="numeric" placeholder="0" value={set.reps}
+            onChange={(e) => updateSet(exIdx, setIdx, "reps", e.target.value)}
+            style={inputStyle(set.done)} />
+          <button onClick={() => toggleSetDone(exIdx, setIdx)} style={{
+            width: 44, height: 40, borderRadius: 10, border: `1px solid ${set.done ? C.success : C.border}`,
+            background: set.done ? C.success : "transparent", color: set.done ? "#000" : C.textDim,
+            fontSize: 16, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+          }}>✓</button>
+          <button onClick={() => removeSet(exIdx, setIdx)} style={{
+            width: 32, height: 40, borderRadius: 10, border: "none", background: "transparent", color: C.textDim, fontSize: 16, cursor: "pointer",
+          }}>×</button>
+        </div>
+      );
+    }
+
+    // Standard: kg + reps
+    return (
+      <div key={setIdx} style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 32px", gap: 8, marginBottom: 6, alignItems: "center" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: set.done ? C.success : C.textDim, textAlign: "center" }}>{setIdx + 1}</span>
+        <input type="number" inputMode="decimal" placeholder="0" value={set.weight}
+          onChange={(e) => updateSet(exIdx, setIdx, "weight", e.target.value)} style={inputStyle(set.done)} />
+        <input type="number" inputMode="numeric" placeholder="0" value={set.reps}
+          onChange={(e) => updateSet(exIdx, setIdx, "reps", e.target.value)} style={inputStyle(set.done)} />
+        <button onClick={() => toggleSetDone(exIdx, setIdx)} style={{
+          width: 44, height: 40, borderRadius: 10, border: `1px solid ${set.done ? C.success : C.border}`,
+          background: set.done ? C.success : "transparent", color: set.done ? "#000" : C.textDim,
+          fontSize: 16, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+        }}>✓</button>
+        <button onClick={() => removeSet(exIdx, setIdx)} style={{
+          width: 32, height: 40, borderRadius: 10, border: "none", background: "transparent", color: C.textDim, fontSize: 16, cursor: "pointer",
+        }}>×</button>
+      </div>
+    );
+  };
+
+  const renderSetHeader = (type) => {
+    if (type === "t") return (
+      <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 44px 32px", gap: 8, marginBottom: 8, padding: "0 2px" }}>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SET</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SEGUNDOS</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>✓</span><span></span>
+      </div>
+    );
+    if (type === "b") return (
+      <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 44px 32px", gap: 8, marginBottom: 8, padding: "0 2px" }}>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SET</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>REPS</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>✓</span><span></span>
+      </div>
+    );
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 32px", gap: 8, marginBottom: 8, padding: "0 2px" }}>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SET</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>KG</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>REPS</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>✓</span><span></span>
+      </div>
+    );
+  };
+
+  // ═══ HOME ═══
+  const renderHome = () => (
+    <div style={{ padding: "0 20px 100px" }}>
+      <div style={{ paddingTop: 16, marginBottom: 28 }}>
+        <p style={{ color: C.textDim, fontSize: 14, marginBottom: 4, fontFamily: fontBody }}>
+          {new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
+        </p>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: 0, fontFamily: font, letterSpacing: "-0.5px" }}>Tu Entreno 🔥</h1>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
+        {[
+          { label: "Esta semana", value: stats.thisWeek, hl: true },
+          { label: "Volumen 7d", value: stats.totalVolume > 1000 ? `${(stats.totalVolume / 1000).toFixed(1)}k` : stats.totalVolume },
+          { label: "Total", value: stats.totalWorkouts },
+        ].map((s, i) => (
+          <div key={i} style={{ ...baseCard, padding: "14px 12px", textAlign: "center", background: s.hl ? C.accentDim : C.card, borderColor: s.hl ? C.accent : C.border }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: s.hl ? C.accent : C.text, fontFamily: font }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={startWorkout} style={{
+        width: "100%", padding: "18px", borderRadius: 16, border: "none",
+        background: `linear-gradient(135deg, ${C.accent}, #ff8f35)`, color: "#fff",
+        fontSize: 17, fontWeight: 700, cursor: "pointer", marginBottom: 10,
+        fontFamily: font, boxShadow: `0 4px 24px ${C.accentGlow}`,
+      }}>+ Empezar Entrenamiento</button>
+
+
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: font }}>Últimas sesiones</h2>
+      {workouts.length === 0 ? (
+        <div style={{ ...baseCard, textAlign: "center", padding: "40px 20px", color: C.textDim }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
+          <p style={{ margin: 0, fontSize: 15 }}>Aún no hay sesiones</p>
+          <p style={{ margin: "8px 0 0", fontSize: 13 }}>¡Empieza tu primer entreno!</p>
+        </div>
+      ) : workouts.slice(0, 5).map((w) => {
+        const vol = totalVolume(w);
+        return (
+          <div key={w.id} onClick={() => { setSelectedWorkout(w); setPrevView("home"); setView("detail"); }}
+            style={{ ...baseCard, marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+                {w.exercises.map((e) => getExerciseInfo(e.exerciseId)?.group).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Sesión"}
+              </div>
+              <div style={{ fontSize: 13, color: C.textDim }}>
+                {formatDate(w.date)} · {totalSets(w)} series{vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}
+              </div>
+            </div>
+            <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ═══ EXERCISE PICKER ═══
+  const exerciseFrequency = useMemo(() => {
+    const freq = {};
+    workouts.forEach((w) => w.exercises.forEach((ex) => { freq[ex.exerciseId] = (freq[ex.exerciseId] || 0) + 1; }));
+    return freq;
+  }, [workouts]);
+
+  const sortByFrequency = (list) => [...list].sort((a, b) => (exerciseFrequency[b.id] || 0) - (exerciseFrequency[a.id] || 0));
+
+  const renderExercisePicker = () => {
+    const q = searchQuery.toLowerCase();
+    const hasFrequent = Object.keys(exerciseFrequency).length > 0;
+
+    const filtered = q
+      ? sortByFrequency(ALL_EXERCISES.filter((e) => e.name.toLowerCase().includes(q) || e.group.toLowerCase().includes(q)))
+      : exerciseFilter
+      ? sortByFrequency((EXERCISES[exerciseFilter] || []).map((e) => ({ ...e, group: exerciseFilter })))
+      : [];
+
+    // Top frequent exercises when no search/filter
+    const frequentExercises = !q && !exerciseFilter && hasFrequent
+      ? sortByFrequency(ALL_EXERCISES.filter((e) => exerciseFrequency[e.id])).slice(0, 8)
+      : [];
+
+    return (
+      <div style={{ padding: "0 20px 100px" }}>
+        <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => { setView(editingWorkout ? "detail" : "workout"); setExerciseFilter(null); setSearchQuery(""); }}
+            style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Añadir Ejercicio</h1>
+        </div>
+
+        <input type="text" placeholder="Buscar ejercicio..." value={searchQuery}
+          onChange={(e) => { setSearchQuery(e.target.value); setExerciseFilter(null); }}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${C.border}`,
+            background: C.card, color: C.text, fontSize: 15, marginBottom: 16, outline: "none",
+            boxSizing: "border-box", fontFamily: fontBody,
+          }} />
+
+        <button onClick={() => setShowNewExercise(true)} style={{
+          width: "100%", padding: "12px", borderRadius: 12, border: `1px dashed ${C.accent}60`,
+          background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600,
+          cursor: "pointer", marginBottom: 16, fontFamily: fontBody,
+        }}>⭐ Crear ejercicio personalizado</button>
+
+        {showNewExercise && (
+          <div style={{ ...baseCard, marginBottom: 16, borderColor: C.accent }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Nuevo ejercicio</div>
+            <input type="text" placeholder="Nombre del ejercicio" value={newExName}
+              onChange={(e) => setNewExName(e.target.value)}
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.border}`,
+                background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 14, outline: "none",
+                boxSizing: "border-box", marginBottom: 10, fontFamily: fontBody,
+              }} />
+            {/* Group selector */}
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6, fontWeight: 600 }}>GRUPO MUSCULAR</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+              {Object.keys(DEFAULT_EXERCISES).map((g) => (
+                <button key={g} onClick={() => setNewExGroup(g)} style={{
+                  padding: "6px 12px", borderRadius: 16, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${newExGroup === g ? C.accent : C.border}`,
+                  background: newExGroup === g ? C.accentDim : "transparent",
+                  color: newExGroup === g ? C.accent : C.textDim,
+                }}>{g}</button>
+              ))}
+            </div>
+            {/* Type selector */}
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6, fontWeight: 600 }}>TIPO DE TRACKING</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {Object.entries(TYPE_LABELS).map(([k, label]) => (
+                <button key={k} onClick={() => setNewExType(k)} style={{
+                  flex: 1, padding: "8px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${newExType === k ? C.accent : C.border}`,
+                  background: newExType === k ? C.accentDim : "transparent",
+                  color: newExType === k ? C.accent : C.textDim, textAlign: "center",
+                }}>{label}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={addCustomExercise} style={{
+                flex: 1, padding: "10px", borderRadius: 10, border: "none",
+                background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              }}>Añadir</button>
+              <button onClick={() => { setShowNewExercise(false); setNewExName(""); }} style={{
+                padding: "10px 16px", borderRadius: 10, border: `1px solid ${C.border}`,
+                background: "transparent", color: C.textDim, fontSize: 14, cursor: "pointer",
+              }}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {!q && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+            {Object.keys(EXERCISES).map((group) => (
+              <button key={group} onClick={() => setExerciseFilter(exerciseFilter === group ? null : group)}
+                style={{
+                  padding: "8px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${exerciseFilter === group ? C.accent : C.border}`,
+                  background: exerciseFilter === group ? C.accentDim : C.card,
+                  color: exerciseFilter === group ? C.accent : C.textDim,
+                }}>{group}</button>
+            ))}
+          </div>
+        )}
+
+        {filtered.length > 0 ? filtered.map((ex) => {
+          const isCustom = ex.id.startsWith("custom_");
+          const freq = exerciseFrequency[ex.id];
+          return (
+            <div key={ex.id} style={{ ...baseCard, marginBottom: 8, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+              <div onClick={() => addExerciseToWorkout(ex)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                <span style={{ fontSize: 22 }}>{ex.emoji}</span>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{ex.name}</div>
+                  <div style={{ fontSize: 12, color: C.textDim }}>
+                    {ex.group} · <span style={{ color: C.accent }}>{TYPE_TAGS[ex.type || "s"]}</span>
+                    {freq && <span style={{ marginLeft: 6 }}>· {freq}×</span>}
+                  </div>
+                </div>
+              </div>
+              {isCustom && (
+                <button onClick={(e) => { e.stopPropagation(); deleteCustomExercise(ex.id); }}
+                  style={{ background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px" }}>✕</button>
+              )}
+            </div>
+          );
+        }) : frequentExercises.length > 0 ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>Frecuentes</div>
+            {frequentExercises.map((ex) => (
+              <div key={ex.id} onClick={() => addExerciseToWorkout(ex)}
+                style={{ ...baseCard, marginBottom: 8, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                <span style={{ fontSize: 22 }}>{ex.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{ex.name}</div>
+                  <div style={{ fontSize: 12, color: C.textDim }}>{ex.group}</div>
+                </div>
+                <span style={{ fontSize: 12, color: C.textDim, fontWeight: 600 }}>{exerciseFrequency[ex.id]}×</span>
+              </div>
+            ))}
+          </>
+        ) : !q && !exerciseFilter ? (
+          <div style={{ color: C.textDim, textAlign: "center", padding: 40, fontSize: 14 }}>Selecciona un grupo muscular o busca</div>
+        ) : (
+          <div style={{ color: C.textDim, textAlign: "center", padding: 40, fontSize: 14 }}>No se encontraron ejercicios</div>
+        )}
+      </div>
+    );
+  };
+
+  // ═══ ACTIVE WORKOUT ═══
+  const renderActiveWorkout = () => (
+    <div style={{ padding: "0 20px 100px" }}>
+      <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Entrenamiento</h1>
+        <button onClick={finishWorkout} style={{
+          padding: "10px 20px", borderRadius: 12, border: "none", background: C.success,
+          color: "#000", fontSize: 14, fontWeight: 700, cursor: "pointer",
+        }}>Finalizar ✓</button>
+      </div>
+
+      {activeWorkout?.exercises.map((ex, exIdx) => {
+        const info = getExerciseInfo(ex.exerciseId);
+        const t = info?.type || "s";
+        const prevBest = getPreviousBest(ex.exerciseId);
+        return (
+          <div key={exIdx} style={{ ...baseCard, marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 22 }}>{info?.emoji || "⭐"}</span>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: C.accent }}>{info?.name || ex.exerciseId}</span>
+                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, background: "rgba(255,255,255,0.06)", color: C.textDim }}>{TYPE_TAGS[t]}</span>
+                </div>
+                {prevBest && (
+                  <div style={{ fontSize: 11, color: C.textDim }}>
+                    Anterior: {prevBest.map((s) => formatSetShort(s, t)).join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+            {renderSetHeader(t)}
+            {ex.sets.map((set, setIdx) => renderSetRow(ex, exIdx, set, setIdx))}
+            <button onClick={() => addSet(exIdx)} style={{
+              width: "100%", padding: "10px", borderRadius: 10, border: `1px dashed ${C.border}`,
+              background: "transparent", color: C.textDim, fontSize: 13, cursor: "pointer", marginTop: 8,
+            }}>+ Añadir Serie</button>
+          </div>
+        );
+      })}
+
+      <button onClick={() => setView("picker")} style={{
+        width: "100%", padding: "16px", borderRadius: 14, border: `2px dashed ${C.accent}40`,
+        background: C.accentDim, color: C.accent, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4,
+      }}>+ Añadir Ejercicio</button>
+    </div>
+  );
+
+  // ═══ EXPORT ═══
+  const [exportData, setExportData] = useState(null);
+  const [exportType, setExportType] = useState("");
+
+  const exportJSON = () => {
+    const data = filteredWorkouts.map((w) => ({
+      date: w.date,
+      exercises: w.exercises.map((ex) => {
+        const info = getExerciseInfo(ex.exerciseId);
+        return {
+          id: ex.exerciseId, name: info?.name || ex.exerciseId,
+          group: info?.group || "?", type: info?.type || "s",
+          sets: ex.sets,
+        };
+      }),
+    }));
+    setExportData(JSON.stringify(data, null, 2));
+    setExportType("JSON");
+  };
+
+  const exportCSV = () => {
+    const rows = [["Fecha", "Ejercicio", "Grupo", "Tipo", "Serie", "Peso (kg)", "Reps", "Segundos"]];
+    filteredWorkouts.forEach((w) => {
+      const date = new Date(w.date).toLocaleDateString("es-ES");
+      w.exercises.forEach((ex) => {
+        const info = getExerciseInfo(ex.exerciseId);
+        const t = info?.type || "s";
+        ex.sets.forEach((s, i) => {
+          rows.push([
+            date, info?.name || ex.exerciseId, info?.group || "", t,
+            i + 1,
+            t === "s" ? (s.weight || "") : "",
+            t !== "t" ? (s.reps || "") : "",
+            t === "t" ? (s.seconds || "") : "",
+          ]);
+        });
+      });
+    });
+    setExportData(rows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n"));
+    setExportType("CSV");
+  };
+
+  const selectAllExport = () => {
+    const el = document.getElementById("export-textarea");
+    if (el) { el.select(); el.setSelectionRange(0, 99999); }
+  };
+
+  // ═══ HISTORY ═══
+  const [historyFilter, setHistoryFilter] = useState("all");
+  const historyFilters = [
+    { id: "all", label: "Todo" },
+    { id: "1w", label: "1S" },
+    { id: "1m", label: "1M" },
+    { id: "3m", label: "3M" },
+    { id: "6m", label: "6M" },
+    { id: "1y", label: "1A" },
+  ];
+
+  const filteredWorkouts = useMemo(() => {
+    const list = historyFilter === "all" ? workouts : (() => {
+      const now = new Date();
+      const ms = { "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365 };
+      const cutoff = new Date(now.getTime() - (ms[historyFilter] || 0) * 86400000);
+      return workouts.filter((w) => new Date(w.date) >= cutoff);
+    })();
+    return [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [workouts, historyFilter]);
+  const renderHistory = () => (
+    <div style={{ padding: "0 20px 100px" }}>
+      <div style={{ paddingTop: 16, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Historial</h1>
+        {filteredWorkouts.length > 0 && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={exportJSON} style={{
+              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
+              background: C.card, color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>JSON</button>
+            <button onClick={exportCSV} style={{
+              padding: "6px 12px", borderRadius: 8, border: `1px solid ${C.border}`,
+              background: C.card, color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>CSV</button>
+          </div>
+        )}
+      </div>
+
+      {/* Time filter */}
+      {workouts.length > 0 && (
+        <div style={{ display: "flex", gap: 0, marginBottom: 18, borderRadius: 10, overflow: "hidden", border: `1px solid ${C.border}` }}>
+          {historyFilters.map((f) => (
+            <button key={f.id} onClick={() => setHistoryFilter(f.id)} style={{
+              flex: 1, padding: "8px 0", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: historyFilter === f.id ? C.accentDim : C.card,
+              color: historyFilter === f.id ? C.accent : C.textDim,
+            }}>{f.label}</button>
+          ))}
+        </div>
+      )}
+
+      {filteredWorkouts.length > 0 && (
+        <p style={{ fontSize: 12, color: C.textDim, margin: "0 0 14px" }}>
+          {filteredWorkouts.length} sesión{filteredWorkouts.length !== 1 ? "es" : ""}
+        </p>
+      )}
+      {exportData && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.85)", zIndex: 1000,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          padding: 20,
+        }}>
+          <div style={{ width: "100%", maxWidth: 440 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: font }}>{exportType}</span>
+              <button onClick={() => setExportData(null)} style={{
+                background: "none", border: "none", color: C.textDim, fontSize: 24, cursor: "pointer",
+              }}>✕</button>
+            </div>
+            <textarea id="export-textarea" readOnly value={exportData}
+              onFocus={(e) => { e.target.select(); e.target.setSelectionRange(0, 99999); }}
+              style={{
+                width: "100%", height: 300, padding: 14, borderRadius: 12,
+                border: `1px solid ${C.border}`, background: C.card,
+                color: C.text, fontSize: 12, fontFamily: "monospace",
+                resize: "none", boxSizing: "border-box", outline: "none",
+              }} />
+            <button onClick={selectAllExport} style={{
+              width: "100%", padding: "14px", borderRadius: 12, border: "none",
+              background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10,
+            }}>Seleccionar todo</button>
+            <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 8 }}>Selecciona → Copia → Pega donde quieras</p>
+          </div>
+        </div>
+      )}
+      {filteredWorkouts.length === 0 ? (
+        <div style={{ ...baseCard, textAlign: "center", padding: "40px 20px", color: C.textDim }}>
+          <p>{workouts.length === 0 ? "Sin sesiones todavía" : "Sin sesiones en este periodo"}</p>
+        </div>
+      ) : filteredWorkouts.map((w) => {
+        const vol = totalVolume(w);
+        return (
+          <div key={w.id} onClick={() => { setSelectedWorkout(w); setPrevView("history"); setView("detail"); }}
+            style={{ ...baseCard, marginBottom: 10, cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{formatDate(w.date)}</div>
+                <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>{totalSets(w)} series</div>
+              </div>
+              {vol > 0 && <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>{(vol / 1000).toFixed(1)}k kg</div>}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {w.exercises.map((ex, i) => {
+                const info = getExerciseInfo(ex.exerciseId);
+                return <span key={i} style={{ padding: "4px 10px", borderRadius: 8, background: "rgba(255,255,255,0.05)", color: C.textDim, fontSize: 12 }}>
+                  {info?.emoji || "⭐"} {info?.name || ex.exerciseId}
+                </span>;
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ═══ DETAIL ═══
+  const renderDetail = () => {
+    if (!selectedWorkout) return null;
+    const isEditing = !!editingWorkout;
+    const w = isEditing ? editingWorkout : selectedWorkout;
+    const vol = totalVolume(w);
+    return (
+      <div style={{ padding: "0 20px 100px" }}>
+        <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => {
+            if (isEditing) { cancelEditing(); } else { setSelectedWorkout(null); setView(prevView); }
+          }} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <div style={{ flex: 1 }}>
+            {isEditing ? (
+              <input type="date"
+                value={new Date(w.date).toISOString().slice(0, 10)}
+                onChange={(e) => {
+                  const d = new Date(e.target.value);
+                  d.setHours(12);
+                  setEditingWorkout((prev) => ({ ...prev, date: d.toISOString() }));
+                }}
+                style={{
+                  background: "rgba(255,255,255,0.06)", border: `1px solid ${C.accent}`,
+                  borderRadius: 10, padding: "8px 12px", color: C.text, fontSize: 16,
+                  fontWeight: 700, fontFamily: font, outline: "none", width: "100%", boxSizing: "border-box",
+                  colorScheme: "dark",
+                }} />
+            ) : (
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>{formatFullDate(w.date)}</h1>
+            )}
+            <p style={{ margin: "2px 0 0", fontSize: 13, color: C.textDim }}>
+              {totalSets(w)} series{vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}
+              {isEditing && <span style={{ color: C.accent, marginLeft: 8 }}>· editando</span>}
+            </p>
+          </div>
+          {!isEditing ? (
+            <button onClick={startEditing} style={{
+              padding: "8px 16px", borderRadius: 10, border: `1px solid ${C.accent}`,
+              background: C.accentDim, color: C.accent, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>✏️ Editar</button>
+          ) : (
+            <button onClick={saveEditing} style={{
+              padding: "8px 16px", borderRadius: 10, border: "none",
+              background: C.success, color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>Guardar ✓</button>
+          )}
+        </div>
+
+        {w.exercises.map((ex, exIdx) => {
+          const info = getExerciseInfo(ex.exerciseId);
+          const t = info?.type || "s";
+          return (
+            <div key={exIdx} style={{ ...baseCard, marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 20 }}>{info?.emoji || "⭐"}</span>
+                  <div>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.accent }}>{info?.name || ex.exerciseId}</span>
+                    {isEditing && <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, background: "rgba(255,255,255,0.06)", color: C.textDim, marginLeft: 8 }}>{TYPE_TAGS[t]}</span>}
+                  </div>
+                </div>
+                {!isEditing ? (
+                  <button onClick={(e) => { e.stopPropagation(); setProgressExercise(ex.exerciseId); setView("progress"); }}
+                    style={{ background: C.accentDim, border: "none", color: C.accent, fontSize: 12, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+                    📈 Progreso
+                  </button>
+                ) : (
+                  <button onClick={() => removeExercise(exIdx)}
+                    style={{ background: C.dangerDim, border: "none", color: C.danger, fontSize: 12, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+                    Quitar
+                  </button>
+                )}
+              </div>
+
+              {isEditing ? (
+                <>
+                  {renderSetHeader(t)}
+                  {ex.sets.map((set, setIdx) => renderSetRow(ex, exIdx, set, setIdx))}
+                  <button onClick={() => addSet(exIdx)} style={{
+                    width: "100%", padding: "10px", borderRadius: 10, border: `1px dashed ${C.border}`,
+                    background: "transparent", color: C.textDim, fontSize: 13, cursor: "pointer", marginTop: 8,
+                  }}>+ Añadir Serie</button>
+                </>
+              ) : (
+                ex.sets.map((s, j) => (
+                  <div key={j} style={{ display: "flex", gap: 16, padding: "8px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, marginBottom: 4, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: C.textDim, width: 30 }}>#{j + 1}</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{formatSetDetail(s, t)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })}
+
+        {isEditing && (
+          <button onClick={() => setView("picker")} style={{
+            width: "100%", padding: "16px", borderRadius: 14, border: `2px dashed ${C.accent}40`,
+            background: C.accentDim, color: C.accent, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4, marginBottom: 12,
+          }}>+ Añadir Ejercicio</button>
+        )}
+
+        <button onClick={() => deleteWorkout(w.id)} style={{
+          width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.danger}40`,
+          background: C.dangerDim, color: C.danger, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: isEditing ? 0 : 12,
+        }}>Eliminar sesión</button>
+      </div>
+    );
+  };
+
+  // ═══ PROGRESS ═══
+  const renderProgress = () => {
+    const data = getProgression(progressExercise);
+    const info = getExerciseInfo(progressExercise);
+    const t = info?.type || "s";
+
+    const charts = t === "t"
+      ? [{ label: "MEJOR TIEMPO (seg)", key: "seconds", color: C.accent }]
+      : t === "b"
+      ? [{ label: "MÁXIMAS REPS", key: "reps", color: C.accent }]
+      : [
+          { label: "PESO MÁXIMO (kg)", key: "weight", color: C.accent },
+          { label: "VOLUMEN MEJOR SERIE (kg)", key: "volume", color: C.success },
+        ];
+
+    return (
+      <div style={{ padding: "0 20px 100px" }}>
+        <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => { setProgressExercise(null); setView("detail"); }}
+            style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>
+              {info?.emoji || "⭐"} {info?.name || progressExercise}
+            </h1>
+            <p style={{ margin: "2px 0 0", fontSize: 13, color: C.textDim }}>Progresión</p>
+          </div>
+        </div>
+        {data.length === 0 ? (
+          <div style={{ ...baseCard, textAlign: "center", padding: "40px 20px", color: C.textDim }}>No hay datos de progresión aún</div>
+        ) : (
+          <>
+            {charts.map((chart) => {
+              const maxVal = Math.max(...data.map((d) => d[chart.key] || 0), 0);
+              return (
+                <div key={chart.key} style={{ ...baseCard, marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, color: C.textDim, marginBottom: 12, fontWeight: 600 }}>{chart.label}</div>
+                  <div style={{ display: "flex", alignItems: "end", gap: 4, height: 120 }}>
+                    {data.slice(-12).map((d, i) => (
+                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontSize: 10, color: C.textDim }}>{d[chart.key]}</span>
+                        <div style={{
+                          width: "100%", height: `${maxVal ? ((d[chart.key] || 0) / maxVal) * 80 : 0}px`,
+                          background: `linear-gradient(to top, ${chart.color}, ${chart.color}90)`,
+                          borderRadius: "6px 6px 2px 2px", minHeight: 4,
+                        }} />
+                        <span style={{ fontSize: 9, color: C.textDim }}>
+                          {new Date(d.date).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ ...baseCard }}>
+              <div style={{ fontSize: 13, color: C.textDim, marginBottom: 12, fontWeight: 600 }}>HISTORIAL</div>
+              {data.map((d, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: i < data.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <span style={{ fontSize: 13, color: C.textDim }}>{formatDate(d.date)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                    {t === "t" ? fmtSec(d.seconds) : t === "b" ? `${d.reps} reps` : `${d.weight} kg × ${d.reps}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // ═══ EXERCISES LIST ═══
+  const renderExercises = () => (
+    <div style={{ padding: "0 20px 100px" }}>
+      <div style={{ paddingTop: 16, marginBottom: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Ejercicios</h1>
+        <p style={{ fontSize: 13, color: C.textDim, marginTop: 4 }}>{ALL_EXERCISES.length} ejercicios disponibles</p>
+      </div>
+      {Object.entries(EXERCISES).map(([group, exs]) => (
+        <div key={group} style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: C.accent, marginBottom: 10, textTransform: "uppercase", letterSpacing: 1 }}>{group} ({exs.length})</h3>
+          {exs.map((ex) => {
+            const prog = getProgression(ex.id);
+            const isCustom = ex.id.startsWith("custom_");
+            const t = ex.type || "s";
+            return (
+              <div key={ex.id} style={{
+                ...baseCard, marginBottom: 6, padding: "12px 16px", display: "flex",
+                justifyContent: "space-between", alignItems: "center",
+                cursor: prog.length > 0 ? "pointer" : "default", opacity: prog.length > 0 ? 1 : 0.6,
+              }} onClick={() => { if (prog.length > 0) { setProgressExercise(ex.id); setPrevView("exercises"); setView("progress"); } }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{ex.emoji}</span>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{ex.name}</span>
+                    <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>
+                      {TYPE_TAGS[t]}{isCustom && <span style={{ color: C.accent, marginLeft: 6 }}>personalizado</span>}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {prog.length > 0 && (
+                    <span style={{ fontSize: 13, color: C.textDim }}>
+                      {t === "t" ? fmtSec(prog[prog.length - 1].seconds) : t === "b" ? `${prog[prog.length - 1].reps} reps` : `${prog[prog.length - 1].weight} kg`} · {prog.length}×
+                    </span>
+                  )}
+                  {isCustom && (
+                    <button onClick={(e) => { e.stopPropagation(); deleteCustomExercise(ex.id); }}
+                      style={{ background: "none", border: "none", color: C.danger, fontSize: 14, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+
+  // ═══ NUTRITION LOGIC ═══
+  const getDayLog = (date) => nutritionLog[date] || { meals: [], basalCal: nutSettings.basalCal, activityCal: 0 };
+  const todayLog = getDayLog(nutDate);
+
+  const dayTotals = useMemo(() => {
+    const log = getDayLog(nutDate);
+    const cal = log.meals.reduce((s, m) => s + (m.cal || 0), 0);
+    const prot = log.meals.reduce((s, m) => s + (m.prot || 0), 0);
+    const balance = cal - log.basalCal - log.activityCal;
+    return { cal, prot, basalCal: log.basalCal, activityCal: log.activityCal, balance };
+  }, [nutritionLog, nutDate, nutSettings]);
+
+  const updateDayField = (field, value) => {
+    setNutritionLog((prev) => ({
+      ...prev,
+      [nutDate]: { ...getDayLog(nutDate), [field]: Number(value) || 0 },
+    }));
+  };
+
+  const addMealFromDB = () => {
+    if (!nutSelectedFood || !nutGrams) return;
+    const f = nutSelectedFood;
+    const g = Number(nutGrams);
+    const meal = { id: Date.now(), name: f.name, grams: g, cal: Math.round(f.cal * g / 100), prot: Math.round(f.prot * g / 100 * 10) / 10, fromDB: true };
+    setNutritionLog((prev) => {
+      const day = getDayLog(nutDate);
+      return { ...prev, [nutDate]: { ...day, meals: [...day.meals, meal] } };
+    });
+    setNutSelectedFood(null); setNutGrams("100"); setNutView("summary");
+  };
+
+  const addManualMeal = () => {
+    if (!nutManualCal) return;
+    const meal = { id: Date.now(), name: nutManualName || "Manual", grams: null, cal: Number(nutManualCal) || 0, prot: Number(nutManualProt) || 0, fromDB: false };
+    setNutritionLog((prev) => {
+      const day = getDayLog(nutDate);
+      return { ...prev, [nutDate]: { ...day, meals: [...day.meals, meal] } };
+    });
+    setNutManualName(""); setNutManualCal(""); setNutManualProt(""); setNutView("summary");
+  };
+
+  const removeMeal = (mealId) => {
+    setNutritionLog((prev) => {
+      const day = getDayLog(nutDate);
+      return { ...prev, [nutDate]: { ...day, meals: day.meals.filter((m) => m.id !== mealId) } };
+    });
+  };
+
+  const saveMealEdit = (mealId, updates) => {
+    setNutritionLog((prev) => {
+      const day = getDayLog(nutDate);
+      return { ...prev, [nutDate]: { ...day, meals: day.meals.map((m) => m.id === mealId ? { ...m, ...updates } : m) } };
+    });
+    setNutEditingMeal(null);
+  };
+
+  const exportNutJSON = () => {
+    const data = { nutrition: nutritionLog, weight: weightLog, settings: nutSettings };
+    setExportData(JSON.stringify(data, null, 2));
+    setExportType("JSON Nutrición");
+  };
+
+  const exportNutCSV = () => {
+    const rows = [["Fecha", "Alimento", "Gramos", "Calorías", "Proteínas", "Basal", "Actividad", "Balance"]];
+    Object.entries(nutritionLog).sort(([a], [b]) => a.localeCompare(b)).forEach(([date, day]) => {
+      const totalCal = day.meals.reduce((s, m) => s + (m.cal || 0), 0);
+      const balance = totalCal - (day.basalCal || 0) - (day.activityCal || 0);
+      if (day.meals.length === 0) {
+        rows.push([date, "", "", 0, 0, day.basalCal || 0, day.activityCal || 0, balance]);
+      } else {
+        day.meals.forEach((m, i) => {
+          rows.push([date, m.name, m.grams || "", m.cal, m.prot, i === 0 ? (day.basalCal || 0) : "", i === 0 ? (day.activityCal || 0) : "", i === 0 ? balance : ""]);
+        });
+      }
+    });
+    setExportData(rows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n"));
+    setExportType("CSV Nutrición");
+  };
+
+  const addWeight = () => {
+    if (!nutNewWeight) return;
+    const entry = { date: nutDate, weight: Number(nutNewWeight) };
+    setWeightLog((prev) => {
+      const filtered = prev.filter((w) => w.date !== nutDate);
+      return [...filtered, entry].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setNutNewWeight(""); setNutView("summary");
+  };
+
+  const changeNutDate = (delta) => {
+    const d = new Date(nutDate);
+    d.setDate(d.getDate() + delta);
+    setNutDate(d.toISOString().slice(0, 10));
+    setNutEditingMeal(null);
+  };
+
+  const latestWeight = weightLog.length > 0 ? weightLog[weightLog.length - 1] : null;
+
+  const nutChartData = useMemo(() => {
+    const ms = { "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365 };
+    const days = ms[nutChartFilter] || 30;
+    const now = new Date();
+    const data = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const log = nutritionLog[key];
+      const wEntry = weightLog.find((w) => w.date === key);
+      const ingeridas = log ? log.meals.reduce((s, m) => s + (m.cal || 0), 0) : null;
+      const quemadas = log ? (log.basalCal || 0) + (log.activityCal || 0) : null;
+      data.push({
+        date: d.toLocaleDateString("es-ES", { day: "numeric", month: "short" }),
+        ingeridas: ingeridas || undefined,
+        quemadas: quemadas || undefined,
+        peso: wEntry ? wEntry.weight : undefined,
+      });
+    }
+    return data;
+  }, [nutritionLog, weightLog, nutChartFilter]);
+
+  // ═══ NUTRITION VIEW ═══
+  const renderNutrition = () => {
+    const green = "#4ade80";
+    const red = "#f87171";
+
+    // ── Summary ──
+    if (nutView === "summary") {
+      const balanceColor = dayTotals.balance > 0 ? green : dayTotals.balance < 0 ? red : C.textDim;
+      const protPct = nutSettings.protTarget > 0 ? Math.round(dayTotals.prot / nutSettings.protTarget * 100) : 0;
+      const dateLabel = nutDate === new Date().toISOString().slice(0, 10) ? "Hoy" :
+        new Date(nutDate + "T12:00").toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
+
+      return (
+        <div style={{ padding: "0 20px 100px" }}>
+          {/* Date nav */}
+          <div style={{ paddingTop: 16, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <button onClick={() => changeNutDate(-1)} style={{ background: "none", border: "none", color: C.accent, fontSize: 24, cursor: "pointer", padding: "4px 12px" }}>‹</button>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font }}>{dateLabel}</div>
+              {latestWeight && <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>Peso: {latestWeight.weight} kg</div>}
+            </div>
+            <button onClick={() => changeNutDate(1)} style={{ background: "none", border: "none", color: C.accent, fontSize: 24, cursor: "pointer", padding: "4px 12px" }}>›</button>
+          </div>
+
+          {/* Balance card */}
+          <div style={{ ...baseCard, marginBottom: 14, padding: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: C.accent, fontFamily: font }}>{dayTotals.cal}</div>
+                <div style={{ fontSize: 11, color: C.textDim }}>kcal ingeridas</div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: "#a78bfa", fontFamily: font }}>{dayTotals.prot}g</div>
+                <div style={{ fontSize: 11, color: C.textDim }}>proteína {protPct > 0 ? `(${protPct}%)` : ""}</div>
+              </div>
+            </div>
+            {/* Protein bar */}
+            {nutSettings.protTarget > 0 && (
+              <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", marginBottom: 14, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 3, width: `${Math.min(protPct, 100)}%`, background: "#a78bfa", transition: "width 0.3s" }} />
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 12, textAlign: "center" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: C.text }}>{dayTotals.basalCal}</div>
+                <div style={{ color: C.textDim }}>Basal</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: C.text }}>{dayTotals.activityCal}</div>
+                <div style={{ color: C.textDim }}>Actividad</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: balanceColor }}>{dayTotals.balance > 0 ? "+" : ""}{dayTotals.balance}</div>
+                <div style={{ color: C.textDim }}>Balance</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Editable basal + activity */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+            <div style={{ ...baseCard, padding: "10px 12px" }}>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>Basal (kcal)</div>
+              <input type="number" value={todayLog.basalCal} onChange={(e) => updateDayField("basalCal", e.target.value)}
+                style={{ width: "100%", background: "transparent", border: "none", color: C.text, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box" }} />
+            </div>
+            <div style={{ ...baseCard, padding: "10px 12px" }}>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>Actividad (kcal)</div>
+              <input type="number" value={todayLog.activityCal} onChange={(e) => updateDayField("activityCal", e.target.value)}
+                style={{ width: "100%", background: "transparent", border: "none", color: C.text, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box" }} />
+            </div>
+          </div>
+
+          {/* Chart toggle */}
+          <button onClick={() => setNutShowChart((p) => !p)} style={{
+            width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`,
+            background: nutShowChart ? C.accentDim : C.card, color: nutShowChart ? C.accent : C.textDim,
+            fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: nutShowChart ? 0 : 14,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}>📊 Evolución {nutShowChart ? "▾" : "▸"}</button>
+
+          {nutShowChart && (
+            <div style={{ ...baseCard, marginBottom: 14, marginTop: 8, padding: "14px 8px 8px", borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
+              <div style={{ display: "flex", gap: 0, marginBottom: 12, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}`, marginLeft: 6, marginRight: 6 }}>
+                {[
+                  { id: "1w", label: "1S" }, { id: "1m", label: "1M" }, { id: "3m", label: "3M" },
+                  { id: "6m", label: "6M" }, { id: "1y", label: "1A" },
+                ].map((f) => (
+                  <button key={f.id} onClick={() => setNutChartFilter(f.id)} style={{
+                    flex: 1, padding: "6px 0", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    background: nutChartFilter === f.id ? C.accentDim : C.card,
+                    color: nutChartFilter === f.id ? C.accent : C.textDim,
+                  }}>{f.label}</button>
+                ))}
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <ComposedChart data={nutChartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="date" tick={{ fill: "#888", fontSize: 10 }} tickLine={false} axisLine={false}
+                    interval={nutChartFilter === "1w" ? 0 : nutChartFilter === "1m" ? 4 : nutChartFilter === "3m" ? 13 : nutChartFilter === "6m" ? 29 : 59} />
+                  <YAxis yAxisId="cal" tick={{ fill: "#888", fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="weight" orientation="right" tick={{ fill: "#888", fontSize: 10 }} tickLine={false} axisLine={false}
+                    domain={["dataMin - 2", "dataMax + 2"]} />
+                  <Tooltip
+                    contentStyle={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 10, fontSize: 12 }}
+                    labelStyle={{ color: "#888" }}
+                    formatter={(val, name) => [name === "peso" ? `${val} kg` : `${val} kcal`, name === "ingeridas" ? "Ingeridas" : name === "quemadas" ? "Quemadas" : "Peso"]}
+                  />
+                  <Line yAxisId="cal" type="monotone" dataKey="ingeridas" stroke="#ff6b35" strokeWidth={2} dot={false} connectNulls />
+                  <Line yAxisId="cal" type="monotone" dataKey="quemadas" stroke="#a78bfa" strokeWidth={2} dot={false} connectNulls strokeDasharray="6 3" />
+                  <Line yAxisId="weight" type="monotone" dataKey="peso" stroke="#4ade80" strokeWidth={2} dot={{ r: 3, fill: "#4ade80" }} connectNulls />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 8, fontSize: 11 }}>
+                <span style={{ color: "#ff6b35" }}>━ Ingeridas</span>
+                <span style={{ color: "#a78bfa" }}>╌ Quemadas</span>
+                <span style={{ color: "#4ade80" }}>● Peso</span>
+              </div>
+            </div>
+          )}
+
+          {/* Meals list */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Comidas</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => { setNutFoodFilter(null); setNutFoodSearch(""); setNutSelectedFood(null); setNutView("addMeal"); }} style={{
+                padding: "6px 14px", borderRadius: 10, border: "none", background: C.accentDim, color: C.accent, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>+ Alimento</button>
+              <button onClick={() => setNutView("addManual")} style={{
+                padding: "6px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>+ Manual</button>
+            </div>
+          </div>
+
+          {todayLog.meals.length === 0 ? (
+            <div style={{ ...baseCard, textAlign: "center", padding: "30px 20px", color: C.textDim }}>
+              <p style={{ margin: 0, fontSize: 14 }}>Sin comidas registradas</p>
+            </div>
+          ) : todayLog.meals.map((m) => {
+            const isEditing = nutEditingMeal === m.id;
+            if (isEditing) {
+              const foodInfo = m.fromDB ? FOOD_DB.find((f) => f.name === m.name) : null;
+              return (
+                <div key={m.id} style={{ ...baseCard, marginBottom: 8, padding: "12px 14px", borderColor: C.accent + "40" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.accent, marginBottom: 10 }}>{m.name}</div>
+                  {foodInfo ? (
+                    <div>
+                      <div style={{ fontSize: 12, color: C.textDim, marginBottom: 4 }}>Gramos:</div>
+                      <input type="number" defaultValue={m.grams} id={`edit-grams-${m.id}`} autoFocus onFocus={(e) => e.target.select()}
+                        style={{ width: "100%", padding: "10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <button onClick={() => {
+                          const g = Number(document.getElementById(`edit-grams-${m.id}`).value) || 0;
+                          saveMealEdit(m.id, { grams: g, cal: Math.round(foodInfo.cal * g / 100), prot: Math.round(foodInfo.prot * g / 100 * 10) / 10 });
+                        }} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.success, color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Guardar</button>
+                        <button onClick={() => setNutEditingMeal(null)} style={{ padding: "10px 16px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      {[
+                        { label: "Calorías", id: `edit-cal-${m.id}`, def: m.cal },
+                        { label: "Proteínas (g)", id: `edit-prot-${m.id}`, def: m.prot },
+                      ].map((f) => (
+                        <div key={f.id} style={{ marginBottom: 8 }}>
+                          <div style={{ fontSize: 12, color: C.textDim, marginBottom: 3 }}>{f.label}</div>
+                          <input type="number" defaultValue={f.def} id={f.id} onFocus={(e) => e.target.select()}
+                            style={{ width: "100%", padding: "8px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 15, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
+                        </div>
+                      ))}
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <button onClick={() => {
+                          saveMealEdit(m.id, {
+                            cal: Number(document.getElementById(`edit-cal-${m.id}`).value) || 0,
+                            prot: Number(document.getElementById(`edit-prot-${m.id}`).value) || 0,
+                          });
+                        }} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: C.success, color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Guardar</button>
+                        <button onClick={() => setNutEditingMeal(null)} style={{ padding: "10px 16px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div key={m.id} onClick={() => setNutEditingMeal(m.id)}
+                style={{ ...baseCard, marginBottom: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{m.name}</div>
+                  <div style={{ fontSize: 12, color: C.textDim }}>{m.grams ? `${m.grams}g · ` : ""}{m.cal} kcal · {m.prot}g prot</div>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); removeMeal(m.id); }} style={{ background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px" }}>✕</button>
+              </div>
+            );
+          })}
+
+          {/* Bottom buttons */}
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button onClick={() => { setNutNewWeight(latestWeight ? String(latestWeight.weight) : ""); setNutView("weightLog"); }} style={{
+              flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>⚖️ Peso</button>
+            <button onClick={() => setNutView("settings")} style={{
+              flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>⚙️ Objetivos</button>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={exportNutJSON} style={{
+              flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>Exportar JSON</button>
+            <button onClick={exportNutCSV} style={{
+              flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>Exportar CSV</button>
+          </div>
+
+          {/* Export modal */}
+          {exportData && (
+            <div style={{
+              position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+              background: "rgba(0,0,0,0.85)", zIndex: 1000,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              padding: 20,
+            }}>
+              <div style={{ width: "100%", maxWidth: 440 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: font }}>{exportType}</span>
+                  <button onClick={() => setExportData(null)} style={{ background: "none", border: "none", color: C.textDim, fontSize: 24, cursor: "pointer" }}>✕</button>
+                </div>
+                <textarea id="export-textarea" readOnly value={exportData}
+                  onFocus={(e) => { e.target.select(); e.target.setSelectionRange(0, 99999); }}
+                  style={{ width: "100%", height: 300, padding: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 12, fontFamily: "monospace", resize: "none", boxSizing: "border-box", outline: "none" }} />
+                <button onClick={selectAllExport} style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10 }}>Seleccionar todo</button>
+                <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 8 }}>Selecciona → Copia → Pega donde quieras</p>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Add from DB ──
+    if (nutView === "addMeal") {
+      const q = nutFoodSearch.toLowerCase();
+      const filtered = FOOD_DB.filter((f) =>
+        (!nutFoodFilter || f.group === nutFoodFilter) &&
+        (!q || f.name.toLowerCase().includes(q))
+      );
+
+      if (nutSelectedFood) {
+        const f = nutSelectedFood;
+        const g = Number(nutGrams) || 0;
+        return (
+          <div style={{ padding: "0 20px 100px" }}>
+            <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+              <button onClick={() => setNutSelectedFood(null)} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>{f.name}</h1>
+            </div>
+            <div style={{ ...baseCard, marginBottom: 16, padding: 16 }}>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8 }}>Por 100g: {f.cal} kcal · {f.prot}g prot</div>
+              <div style={{ fontSize: 13, color: C.textDim, marginBottom: 8 }}>Gramos:</div>
+              <input type="number" value={nutGrams} onChange={(e) => setNutGrams(e.target.value)} autoFocus
+                onFocus={(e) => e.target.select()}
+                style={{ width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 20, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
+              <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                {[50, 100, 150, 200, 250, 300].map((v) => (
+                  <button key={v} onClick={() => setNutGrams(String(v))} style={{
+                    padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                    border: `1px solid ${nutGrams === String(v) ? C.accent : C.border}`,
+                    background: nutGrams === String(v) ? C.accentDim : C.card,
+                    color: nutGrams === String(v) ? C.accent : C.textDim,
+                  }}>{v}g</button>
+                ))}
+              </div>
+              {g > 0 && (
+                <div style={{ marginTop: 14, padding: "12px", borderRadius: 10, background: "rgba(255,255,255,0.03)", textAlign: "center" }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{Math.round(f.cal * g / 100)} kcal</span>
+                  <span style={{ fontSize: 14, color: C.textDim, marginLeft: 12 }}>{Math.round(f.prot * g / 100 * 10) / 10}g prot</span>
+                </div>
+              )}
+            </div>
+            <button onClick={addMealFromDB} style={{
+              width: "100%", padding: "16px", borderRadius: 14, border: "none",
+              background: `linear-gradient(135deg, ${C.accent}, #ff8f35)`, color: "#fff",
+              fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: font,
+            }}>Añadir</button>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{ padding: "0 20px 100px" }}>
+          <div style={{ paddingTop: 16, marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => setNutView("summary")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Añadir alimento</h1>
+          </div>
+          <input type="search" placeholder="Buscar alimento..." value={nutFoodSearch} onChange={(e) => setNutFoodSearch(e.target.value)}
+            style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 14, outline: "none", marginBottom: 12, boxSizing: "border-box", fontFamily: fontBody }} />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+            <button onClick={() => setNutFoodFilter(null)} style={{
+              padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              border: `1px solid ${!nutFoodFilter ? C.accent : C.border}`,
+              background: !nutFoodFilter ? C.accentDim : "transparent",
+              color: !nutFoodFilter ? C.accent : C.textDim,
+            }}>Todos</button>
+            {FOOD_GROUPS.map((g) => (
+              <button key={g} onClick={() => setNutFoodFilter(g)} style={{
+                padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                border: `1px solid ${nutFoodFilter === g ? C.accent : C.border}`,
+                background: nutFoodFilter === g ? C.accentDim : "transparent",
+                color: nutFoodFilter === g ? C.accent : C.textDim,
+              }}>{g}</button>
+            ))}
+          </div>
+          {filtered.map((f) => (
+            <div key={f.id} onClick={() => setNutSelectedFood(f)}
+              style={{ ...baseCard, marginBottom: 6, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{f.name}</div>
+                <div style={{ fontSize: 11, color: C.textDim }}>{f.group}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{f.cal} kcal</div>
+                <div style={{ fontSize: 11, color: C.textDim }}>{f.prot}g prot</div>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ textAlign: "center", color: C.textDim, padding: 30, fontSize: 14 }}>No se encontraron alimentos</div>}
+        </div>
+      );
+    }
+
+    // ── Manual entry ──
+    if (nutView === "addManual") {
+      return (
+        <div style={{ padding: "0 20px 100px" }}>
+          <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => setNutView("summary")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Entrada manual</h1>
+          </div>
+          <div style={{ ...baseCard, padding: 16 }}>
+            {[
+              { label: "Nombre (opcional)", val: nutManualName, set: setNutManualName, type: "text", ph: "Ej: Cena restaurante" },
+              { label: "Calorías (kcal)", val: nutManualCal, set: setNutManualCal, type: "number", ph: "500" },
+              { label: "Proteínas (g)", val: nutManualProt, set: setNutManualProt, type: "number", ph: "30" },
+            ].map((f, i) => (
+              <div key={i} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: C.textDim, marginBottom: 4 }}>{f.label}</div>
+                <input type={f.type} placeholder={f.ph} value={f.val} onChange={(e) => f.set(e.target.value)}
+                  style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 15, outline: "none", fontFamily: fontBody, boxSizing: "border-box" }} />
+              </div>
+            ))}
+          </div>
+          <button onClick={addManualMeal} disabled={!nutManualCal} style={{
+            width: "100%", padding: "16px", borderRadius: 14, border: "none",
+            background: nutManualCal ? `linear-gradient(135deg, ${C.accent}, #ff8f35)` : C.border, color: nutManualCal ? "#fff" : C.textDim,
+            fontSize: 15, fontWeight: 700, cursor: nutManualCal ? "pointer" : "default", marginTop: 16, fontFamily: font,
+          }}>Añadir</button>
+        </div>
+      );
+    }
+
+    // ── Weight log ──
+    if (nutView === "weightLog") {
+      const last10 = [...weightLog].reverse();
+      return (
+        <div style={{ padding: "0 20px 100px" }}>
+          <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => setNutView("summary")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>⚖️ Registro de Peso</h1>
+          </div>
+          <div style={{ ...baseCard, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6 }}>Peso hoy ({nutDate})</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="number" step="0.1" placeholder="80.0" value={nutNewWeight} onChange={(e) => setNutNewWeight(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 18, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
+              <button onClick={addWeight} disabled={!nutNewWeight} style={{
+                padding: "12px 24px", borderRadius: 10, border: "none",
+                background: nutNewWeight ? C.accent : C.border, color: nutNewWeight ? "#fff" : C.textDim,
+                fontSize: 14, fontWeight: 700, cursor: nutNewWeight ? "pointer" : "default",
+              }}>Guardar</button>
+            </div>
+          </div>
+          {last10.length > 0 && (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>Últimos registros</div>
+              {last10.map((w, i) => (
+                <div key={i} style={{ ...baseCard, marginBottom: 6, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: C.textDim }}>{new Date(w.date + "T12:00").toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{w.weight} kg</span>
+                    <button onClick={() => setWeightLog((prev) => prev.filter((x) => x.date !== w.date))}
+                      style={{ background: "none", border: "none", color: C.danger, fontSize: 14, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // ── Settings ──
+    if (nutView === "settings") {
+      return (
+        <div style={{ padding: "0 20px 100px" }}>
+          <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => setNutView("summary")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>⚙️ Objetivos</h1>
+          </div>
+          <div style={{ ...baseCard, padding: 16 }}>
+            {[
+              { label: "Calorías basales por defecto", val: nutSettings.basalCal, key: "basalCal" },
+              { label: "Objetivo de proteínas (g)", val: nutSettings.protTarget, key: "protTarget" },
+            ].map((f) => (
+              <div key={f.key} style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6 }}>{f.label}</div>
+                <input type="number" value={f.val} onChange={(e) => setNutSettings((prev) => ({ ...prev, [f.key]: Number(e.target.value) || 0 }))}
+                  style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 18, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 12 }}>El basal se aplica como valor por defecto a días nuevos. Puedes editarlo por día.</p>
+
+          <button onClick={() => {
+            const nutLog = {};
+            const wLog = [];
+            const now = new Date();
+            let w = 82;
+            const meals = [
+              [{ name: "Avena", cal: 280, prot: 7.5, grams: 75 }, { name: "YoPro", cal: 87, prot: 15, grams: 150 }, { name: "Pechuga pollo", cal: 214, prot: 47.4, grams: 200 }, { name: "Arroz", cal: 246, prot: 6, grams: 150 }, { name: "Ensalada variada", cal: 36, prot: 1.6, grams: 200 }],
+              [{ name: "Clara de huevo", cal: 96, prot: 21.8, grams: 200 }, { name: "Pan Artesano", cal: 122, prot: 5, grams: 50 }, { name: "Atún Natural", cal: 168, prot: 40.5, grams: 150 }, { name: "Brócoli", cal: 53, prot: 3, grams: 150 }, { name: "FAGE 0%", cal: 81, prot: 15.5, grams: 150 }],
+              [{ name: "Pechuga de pavo", cal: 224, prot: 50.2, grams: 200 }, { name: "Arroz integral", cal: 252, prot: 6, grams: 150 }, { name: "Queso Cottage Proteína", cal: 80, prot: 15, grams: 100 }, { name: "Plátano", cal: 92, prot: 1.1, grams: 100 }, { name: "Anacardos/Nueces", cal: 180, prot: 5.4, grams: 30 }],
+              [{ name: "Salmón Ahumado", cal: 226, prot: 24, grams: 100 }, { name: "Requesón", cal: 108, prot: 18.3, grams: 150 }, { name: "Filete ternera", cal: 250, prot: 43, grams: 200 }, { name: "Edamame", cal: 124, prot: 11, grams: 100 }, { name: "Chocolate 70%", cal: 96, prot: 2.2, grams: 20 }],
+              [{ name: "Protein+", cal: 69, prot: 12, grams: 150 }, { name: "All Bran", cal: 168, prot: 7, grams: 50 }, { name: "Albóndigas", cal: 300, prot: 24, grams: 200 }, { name: "Gazpacho", cal: 90, prot: 1.6, grams: 200 }, { name: "Pavo Cocido (Merc)", cal: 78, prot: 17.8, grams: 100 }],
+            ];
+            for (let i = 60; i >= 0; i--) {
+              const d = new Date(now); d.setDate(d.getDate() - i);
+              const key = d.toISOString().slice(0, 10);
+              const dayMeals = meals[Math.floor(Math.random() * meals.length)];
+              const skip = Math.random() < 0.1;
+              if (!skip) {
+                const activity = Math.random() < 0.5 ? Math.round(200 + Math.random() * 400) : 0;
+                nutLog[key] = {
+                  meals: dayMeals.map((m) => ({ ...m, id: Date.now() + Math.random() * 1e6, fromDB: true })),
+                  basalCal: 2100, activityCal: activity,
+                };
+              }
+              if (i % 3 === 0) {
+                w += (Math.random() - 0.55) * 0.4;
+                wLog.push({ date: key, weight: Math.round(w * 10) / 10 });
+              }
+            }
+            setNutritionLog(nutLog);
+            setWeightLog(wLog);
+            // Also generate some workout history
+            const wkTemplates = [
+              [{ id: "bench_press", sets: [{w:80,r:10},{w:85,r:8},{w:85,r:8}] }, { id: "incline_db_press", sets: [{w:30,r:10},{w:32,r:8},{w:32,r:8}] }, { id: "chest_fly", sets: [{w:15,r:12},{w:15,r:12}] }, { id: "tricep_pushdown", sets: [{w:30,r:12},{w:35,r:10},{w:35,r:10}] }],
+              [{ id: "lat_pulldown", sets: [{w:60,r:10},{w:65,r:8},{w:65,r:8}] }, { id: "barbell_row", sets: [{w:60,r:10},{w:65,r:8},{w:65,r:8}] }, { id: "seated_cable_row", sets: [{w:50,r:12},{w:55,r:10}] }, { id: "barbell_curl", sets: [{w:25,r:10},{w:25,r:10},{w:25,r:8}] }],
+              [{ id: "squat", sets: [{w:90,r:8},{w:95,r:6},{w:95,r:6}] }, { id: "leg_press", sets: [{w:150,r:10},{w:160,r:8},{w:160,r:8}] }, { id: "leg_curl", sets: [{w:40,r:12},{w:45,r:10}] }, { id: "calf_raise", sets: [{w:60,r:15},{w:60,r:15}] }],
+              [{ id: "ohp", sets: [{w:40,r:10},{w:45,r:8},{w:45,r:8}] }, { id: "lateral_raise", sets: [{w:12,r:12},{w:12,r:12},{w:14,r:10}] }, { id: "face_pull", sets: [{w:20,r:15},{w:20,r:15}] }, { id: "pushup", sets: [{r:20},{r:18},{r:15}] }],
+            ];
+            const wks = [];
+            for (let i = 55; i >= 0; i -= Math.floor(2 + Math.random() * 2)) {
+              const d = new Date(now); d.setDate(d.getDate() - i);
+              const tmpl = wkTemplates[Math.floor(Math.random() * wkTemplates.length)];
+              wks.push({
+                id: Date.now() + i,
+                date: d.toISOString(),
+                exercises: tmpl.map((ex) => ({
+                  exerciseId: ex.id,
+                  sets: ex.sets.map((s) => s.w ? { weight: String(s.w), reps: String(s.r), done: true } : { reps: String(s.r), done: true }),
+                })),
+              });
+            }
+            setWorkouts(wks);
+            setNutView("summary");
+          }} style={{
+            width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.danger}40`,
+            background: `${C.danger}15`, color: C.danger, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 24,
+          }}>🧪 Cargar datos de prueba (60 días)</button>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  // ═══ TAB BAR & LAYOUT ═══
+  const tabs = [
+    { id: "home", icon: "🏠", label: "Inicio" },
+    { id: "nutrition", icon: "🍽️", label: "Nutrición" },
+    { id: "history", icon: "📋", label: "Historial" },
+    { id: "exercises", icon: "💪", label: "Ejercicios" },
+  ];
+
+  if (!loaded) return (
+    <div style={{ background: C.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: C.accent, fontSize: 32 }}>🏋️</div>
+    </div>
+  );
+
+  const showTabBar = !["workout", "picker"].includes(view) && !editingWorkout;
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", fontFamily: fontBody, color: C.text, position: "relative" }}>
+      {view === "home" && renderHome()}
+      {view === "workout" && renderActiveWorkout()}
+      {view === "picker" && renderExercisePicker()}
+      {view === "history" && renderHistory()}
+      {view === "nutrition" && renderNutrition()}
+      {view === "detail" && renderDetail()}
+      {view === "progress" && renderProgress()}
+      {view === "exercises" && renderExercises()}
+      {showTabBar && (
+        <div style={{
+          position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+          width: "100%", maxWidth: 480, display: "flex", justifyContent: "space-around",
+          padding: "12px 0 28px", background: `linear-gradient(to top, ${C.bg} 60%, transparent)`,
+          backdropFilter: "blur(20px)", borderTop: `1px solid ${C.border}`,
+        }}>
+          {tabs.map((tab) => (
+            <button key={tab.id} onClick={() => { setEditingWorkout(null); if (tab.id === "nutrition") setNutView("summary"); setView(tab.id); }} style={{
+              background: "none", border: "none", fontSize: 11, cursor: "pointer",
+              color: [tab.id, ...(tab.id === "home" ? ["detail"] : [])].includes(view) ? C.accent : C.textDim,
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "4px 16px",
+            }}>
+              <span style={{ fontSize: 22 }}>{tab.icon}</span>
+              <span style={{ fontWeight: 600 }}>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// Mount the app
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<WorkoutTracker />);
+  </script>
+</body>
+</html>
