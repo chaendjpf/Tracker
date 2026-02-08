@@ -164,6 +164,7 @@ const DEFAULT_EXERCISES = {
 };
 
 const CUSTOM_EXERCISES_KEY = "gym-tracker-custom-exercises";
+const CUSTOM_FOODS_KEY = "gym-tracker-custom-foods";
 const STORAGE_KEY = "gym-tracker-data";
 const NUTRITION_KEY = "gym-tracker-nutrition";
 const WEIGHT_KEY = "gym-tracker-weight";
@@ -293,6 +294,14 @@ function WorkoutTracker() {
   const [prevView, setPrevView] = useState("home");
   const [editingWorkout, setEditingWorkout] = useState(null);
 
+  // ── Custom foods ──
+  const [customFoods, setCustomFoods] = useState([]);
+  const [showNewFood, setShowNewFood] = useState(false);
+  const [newFoodName, setNewFoodName] = useState("");
+  const [newFoodGroup, setNewFoodGroup] = useState("Base");
+  const [newFoodCal, setNewFoodCal] = useState("");
+  const [newFoodProt, setNewFoodProt] = useState("");
+
   // ── Nutrition state ──
   const [nutritionLog, setNutritionLog] = useState({}); // { "2026-02-08": { meals: [...], basalCal: 2000, activityCal: 0 } }
   const [weightLog, setWeightLog] = useState([]); // [{ date: "2026-02-08", weight: 80 }]
@@ -328,10 +337,14 @@ function WorkoutTracker() {
 
   const getExerciseInfo = (id) => ALL_EXERCISES.find((e) => e.id === id);
 
+  const ALL_FOODS = useMemo(() => [...FOOD_DB, ...customFoods], [customFoods]);
+  const ALL_FOOD_GROUPS = useMemo(() => [...new Set(ALL_FOODS.map((f) => f.group))], [ALL_FOODS]);
+
   useEffect(() => {
     (() => {
       try { const r = localStorage.getItem(STORAGE_KEY); if (r) setWorkouts(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(CUSTOM_EXERCISES_KEY); if (r) setCustomExercises(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(CUSTOM_FOODS_KEY); if (r) setCustomFoods(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(NUTRITION_KEY); if (r) setNutritionLog(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(WEIGHT_KEY); if (r) setWeightLog(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(NUTRITION_SETTINGS_KEY); if (r) setNutSettings(JSON.parse(r)); } catch {}
@@ -341,6 +354,7 @@ function WorkoutTracker() {
 
   useEffect(() => { if (loaded) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(workouts)); } catch {} } }, [workouts, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(CUSTOM_EXERCISES_KEY, JSON.stringify(customExercises)); } catch {} } }, [customExercises, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(CUSTOM_FOODS_KEY, JSON.stringify(customFoods)); } catch {} } }, [customFoods, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_KEY, JSON.stringify(nutritionLog)); } catch {} } }, [nutritionLog, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(WEIGHT_KEY, JSON.stringify(weightLog)); } catch {} } }, [weightLog, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_SETTINGS_KEY, JSON.stringify(nutSettings)); } catch {} } }, [nutSettings, loaded]);
@@ -460,6 +474,17 @@ function WorkoutTracker() {
       }
       return updated;
     });
+  };
+
+  const addCustomFood = () => {
+    if (!newFoodName.trim() || !newFoodCal) return;
+    const food = { id: "custom_food_" + Date.now(), name: newFoodName.trim(), group: newFoodGroup, cal: Number(newFoodCal) || 0, prot: Number(newFoodProt) || 0 };
+    setCustomFoods((prev) => [...prev, food]);
+    setNewFoodName(""); setNewFoodCal(""); setNewFoodProt(""); setNewFoodGroup("Base"); setShowNewFood(false);
+  };
+
+  const deleteCustomFood = (id) => {
+    setCustomFoods((prev) => prev.filter((f) => f.id !== id));
   };
 
   const getProgression = (exerciseId) => {
@@ -1524,7 +1549,7 @@ function WorkoutTracker() {
           ) : todayLog.meals.map((m) => {
             const isEditing = nutEditingMeal === m.id;
             if (isEditing) {
-              const foodInfo = m.fromDB ? FOOD_DB.find((f) => f.name === m.name) : null;
+              const foodInfo = m.fromDB ? ALL_FOODS.find((f) => f.name === m.name) : null;
               return (
                 <div key={m.id} style={{ ...baseCard, marginBottom: 8, padding: "12px 14px", borderColor: C.accent + "40" }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.accent, marginBottom: 10 }}>{m.name}</div>
@@ -1625,7 +1650,7 @@ function WorkoutTracker() {
     // ── Add from DB ──
     if (nutView === "addMeal") {
       const q = nutFoodSearch.toLowerCase();
-      const filtered = FOOD_DB.filter((f) =>
+      const filtered = ALL_FOODS.filter((f) =>
         (!nutFoodFilter || f.group === nutFoodFilter) &&
         (!q || f.name.toLowerCase().includes(q))
       );
@@ -1679,6 +1704,52 @@ function WorkoutTracker() {
           </div>
           <input type="search" placeholder="Buscar alimento..." value={nutFoodSearch} onChange={(e) => setNutFoodSearch(e.target.value)}
             style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 14, outline: "none", marginBottom: 12, boxSizing: "border-box", fontFamily: fontBody }} />
+
+          <button onClick={() => setShowNewFood(true)} style={{
+            width: "100%", padding: "12px", borderRadius: 12, border: `1px dashed ${C.accent}60`,
+            background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600,
+            cursor: "pointer", marginBottom: 16, fontFamily: fontBody,
+          }}>⭐ Crear alimento personalizado</button>
+
+          {showNewFood && (
+            <div style={{ ...baseCard, marginBottom: 16, borderColor: C.accent }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Nuevo alimento</div>
+              <input type="text" placeholder="Nombre del alimento" value={newFoodName}
+                onChange={(e) => setNewFoodName(e.target.value)}
+                style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10, fontFamily: fontBody }} />
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6, fontWeight: 600 }}>GRUPO</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                {ALL_FOOD_GROUPS.map((g) => (
+                  <button key={g} onClick={() => setNewFoodGroup(g)} style={{
+                    padding: "6px 12px", borderRadius: 16, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: `1px solid ${newFoodGroup === g ? C.accent : C.border}`,
+                    background: newFoodGroup === g ? C.accentDim : "transparent",
+                    color: newFoodGroup === g ? C.accent : C.textDim,
+                  }}>{g}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6, fontWeight: 600 }}>VALORES POR 100g</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+                <input type="number" inputMode="numeric" placeholder="Calorías (kcal)" value={newFoodCal}
+                  onChange={(e) => setNewFoodCal(e.target.value)}
+                  style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: fontBody }} />
+                <input type="number" inputMode="decimal" placeholder="Proteína (g)" value={newFoodProt}
+                  onChange={(e) => setNewFoodProt(e.target.value)}
+                  style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: fontBody }} />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={addCustomFood} style={{
+                  flex: 1, padding: "10px", borderRadius: 10, border: "none",
+                  background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}>Añadir</button>
+                <button onClick={() => { setShowNewFood(false); setNewFoodName(""); setNewFoodCal(""); setNewFoodProt(""); }} style={{
+                  padding: "10px 16px", borderRadius: 10, border: `1px solid ${C.border}`,
+                  background: "transparent", color: C.textDim, fontSize: 14, cursor: "pointer",
+                }}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
             <button onClick={() => setNutFoodFilter(null)} style={{
               padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
@@ -1686,7 +1757,7 @@ function WorkoutTracker() {
               background: !nutFoodFilter ? C.accentDim : "transparent",
               color: !nutFoodFilter ? C.accent : C.textDim,
             }}>Todos</button>
-            {FOOD_GROUPS.map((g) => (
+            {ALL_FOOD_GROUPS.map((g) => (
               <button key={g} onClick={() => setNutFoodFilter(g)} style={{
                 padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
                 border: `1px solid ${nutFoodFilter === g ? C.accent : C.border}`,
@@ -1695,19 +1766,27 @@ function WorkoutTracker() {
               }}>{g}</button>
             ))}
           </div>
-          {filtered.map((f) => (
-            <div key={f.id} onClick={() => setNutSelectedFood(f)}
-              style={{ ...baseCard, marginBottom: 6, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{f.name}</div>
-                <div style={{ fontSize: 11, color: C.textDim }}>{f.group}</div>
+          {filtered.map((f) => {
+            const isCustomFood = f.id.startsWith("custom_food_");
+            return (
+              <div key={f.id} style={{ ...baseCard, marginBottom: 6, padding: "10px 14px", display: "flex", alignItems: "center" }}>
+                <div onClick={() => setNutSelectedFood(f)} style={{ flex: 1, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{f.name}</div>
+                    <div style={{ fontSize: 11, color: C.textDim }}>{f.group}{isCustomFood && <span style={{ color: C.accent, marginLeft: 6 }}>personalizado</span>}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{f.cal} kcal</div>
+                    <div style={{ fontSize: 11, color: C.textDim }}>{f.prot}g prot</div>
+                  </div>
+                </div>
+                {isCustomFood && (
+                  <button onClick={(e) => { e.stopPropagation(); deleteCustomFood(f.id); }}
+                    style={{ background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px", marginLeft: 8 }}>✕</button>
+                )}
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{f.cal} kcal</div>
-                <div style={{ fontSize: 11, color: C.textDim }}>{f.prot}g prot</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {filtered.length === 0 && <div style={{ textAlign: "center", color: C.textDim, padding: 30, fontSize: 14 }}>No se encontraron alimentos</div>}
         </div>
       );
