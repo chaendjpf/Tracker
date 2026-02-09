@@ -672,7 +672,31 @@ function WorkoutTracker() {
   };
 
   // ═══ HOME ═══
-  const renderHome = () => (
+  const repeatWorkout = (w) => {
+    const newExercises = w.exercises.map((ex) => {
+      const info = getExerciseInfo(ex.exerciseId);
+      const t = info?.type || "s";
+      return {
+        exerciseId: ex.exerciseId,
+        sets: ex.sets.map((s) => {
+          if (t === "t") return { seconds: s.seconds || "", distance: s.distance || "", heartRate: s.heartRate || "", done: false };
+          if (t === "b") return { reps: s.reps || "", done: false };
+          return { weight: s.weight || "", reps: s.reps || "", done: false };
+        }),
+      };
+    });
+    setActiveWorkout({ exercises: newExercises, date: new Date().toISOString() });
+    setView("workout");
+  };
+
+  const renderHome = () => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayNut = getDayLog(todayKey);
+    const nutCal = todayNut.meals.reduce((s, m) => s + (m.cal || 0), 0);
+    const nutProt = todayNut.meals.reduce((s, m) => s + (m.prot || 0), 0);
+    const nutBalance = nutCal - todayNut.basalCal - todayNut.activityCal;
+
+    return (
     <div style={{ padding: "0 20px 100px" }}>
       <div style={{ paddingTop: 16, marginBottom: 28 }}>
         <p style={{ color: C.textDim, fontSize: 14, marginBottom: 4, fontFamily: fontBody }}>
@@ -692,15 +716,41 @@ function WorkoutTracker() {
           </div>
         ))}
       </div>
+
+      {/* Mini resumen nutrición hoy */}
+      <div onClick={() => { setNutDate(todayKey); setNutView("summary"); setView("nutrition"); }} style={{
+        ...baseCard, marginBottom: 20, cursor: "pointer", padding: "14px 16px",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>🍽️</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+              Hoy: {nutCal} kcal · {Math.round(nutProt)}g prot
+            </div>
+            <div style={{ fontSize: 12, color: nutBalance >= 0 ? C.success : C.danger }}>
+              Balance: {nutBalance >= 0 ? "+" : ""}{nutBalance} kcal
+            </div>
+          </div>
+        </div>
+        <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
+      </div>
+
       <button onClick={startWorkout} style={{
         width: "100%", padding: "18px", borderRadius: 16, border: "none",
         background: `linear-gradient(135deg, ${C.accent}, #ff8f35)`, color: "#fff",
-        fontSize: 17, fontWeight: 700, cursor: "pointer", marginBottom: 10,
+        fontSize: 17, fontWeight: 700, cursor: "pointer", marginBottom: 24,
         fontFamily: font, boxShadow: `0 4px 24px ${C.accentGlow}`,
       }}>+ Empezar Entrenamiento</button>
 
-
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: font }}>Últimas sesiones</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Últimas sesiones</h2>
+        {workouts.length > 0 && (
+          <button onClick={() => setView("history")} style={{
+            background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0,
+          }}>Ver todo ›</button>
+        )}
+      </div>
       {workouts.length === 0 ? (
         <div style={{ ...baseCard, textAlign: "center", padding: "40px 20px", color: C.textDim }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
@@ -710,9 +760,9 @@ function WorkoutTracker() {
       ) : workouts.slice(0, 5).map((w) => {
         const vol = totalVolume(w);
         return (
-          <div key={w.id} onClick={() => { setSelectedWorkout(w); setPrevView("home"); setView("detail"); }}
-            style={{ ...baseCard, marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
+          <div key={w.id} style={{ ...baseCard, marginBottom: 10, display: "flex", alignItems: "center" }}>
+            <div onClick={() => { setSelectedWorkout(w); setPrevView("home"); setView("detail"); }}
+              style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>
                 {w.exercises.map((e) => getExerciseInfo(e.exerciseId)?.group).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Sesión"}
               </div>
@@ -720,12 +770,34 @@ function WorkoutTracker() {
                 {formatDate(w.date)} · {totalSets(w)} series{vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}
               </div>
             </div>
-            <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
+            <button onClick={(e) => { e.stopPropagation(); repeatWorkout(w); }} title="Repetir entrenamiento" style={{
+              background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 8px",
+              color: C.accent, fontSize: 16, cursor: "pointer", marginLeft: 8, flexShrink: 0,
+            }}>🔄</button>
           </div>
         );
       })}
+
+      {/* Acceso rápido a ejercicios */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24, marginBottom: 14 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Ejercicios</h2>
+        <button onClick={() => setView("exercises")} style={{
+          background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0,
+        }}>Ver todos ›</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {Object.entries(EXERCISES).slice(0, 6).map(([group, exs]) => (
+          <div key={group} onClick={() => { setView("exercises"); }} style={{
+            ...baseCard, padding: "14px 12px", cursor: "pointer", textAlign: "center",
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{group}</div>
+            <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>{exs.length} ejercicios</div>
+          </div>
+        ))}
+      </div>
     </div>
-  );
+    );
+  };
 
   // ═══ EXERCISE PICKER ═══
   const exerciseFrequency = useMemo(() => {
@@ -999,7 +1071,10 @@ function WorkoutTracker() {
   const renderHistory = () => (
     <div style={{ padding: "0 20px 100px" }}>
       <div style={{ paddingTop: 16, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Historial</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Historial</h1>
+        </div>
         {filteredWorkouts.length > 0 && (
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={exportJSON} style={{
@@ -1277,8 +1352,13 @@ function WorkoutTracker() {
   const renderExercises = () => (
     <div style={{ padding: "0 20px 100px" }}>
       <div style={{ paddingTop: 16, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Ejercicios</h1>
-        <p style={{ fontSize: 13, color: C.textDim, marginTop: 4 }}>{ALL_EXERCISES.length} ejercicios disponibles</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setView("home")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Ejercicios</h1>
+            <p style={{ fontSize: 13, color: C.textDim, marginTop: 4 }}>{ALL_EXERCISES.length} ejercicios disponibles</p>
+          </div>
+        </div>
       </div>
       {Object.entries(EXERCISES).map(([group, exs]) => (
         <div key={group} style={{ marginBottom: 20 }}>
@@ -1917,6 +1997,7 @@ function WorkoutTracker() {
           </div>
           <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 12 }}>El basal se aplica como valor por defecto a días nuevos. Puedes editarlo por día.</p>
 
+          {workouts.length === 0 && Object.keys(nutritionLog).length === 0 && (
           <button onClick={() => {
             const nutLog = {};
             const wLog = [];
@@ -1974,6 +2055,7 @@ function WorkoutTracker() {
             width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.danger}40`,
             background: `${C.danger}15`, color: C.danger, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 24,
           }}>🧪 Cargar datos de prueba (60 días)</button>
+          )}
         </div>
       );
     }
@@ -1983,10 +2065,8 @@ function WorkoutTracker() {
 
   // ═══ TAB BAR & LAYOUT ═══
   const tabs = [
-    { id: "home", icon: "🏠", label: "Inicio" },
+    { id: "home", icon: "🏋️", label: "Entreno" },
     { id: "nutrition", icon: "🍽️", label: "Nutrición" },
-    { id: "history", icon: "📋", label: "Historial" },
-    { id: "exercises", icon: "💪", label: "Ejercicios" },
   ];
 
   if (!loaded) return (
@@ -2017,7 +2097,7 @@ function WorkoutTracker() {
           {tabs.map((tab) => (
             <button key={tab.id} onClick={() => { setEditingWorkout(null); if (tab.id === "nutrition") setNutView("summary"); setView(tab.id); }} style={{
               background: "none", border: "none", fontSize: 11, cursor: "pointer",
-              color: [tab.id, ...(tab.id === "home" ? ["detail"] : [])].includes(view) ? C.accent : C.textDim,
+              color: [tab.id, ...(tab.id === "home" ? ["history", "exercises", "detail", "progress"] : [])].includes(view) ? C.accent : C.textDim,
               display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "4px 16px",
             }}>
               <span style={{ fontSize: 22 }}>{tab.icon}</span>
