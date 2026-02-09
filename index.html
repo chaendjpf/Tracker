@@ -256,7 +256,7 @@ const fmtSec = (s) => {
 };
 
 const emptySet = (type) => {
-  if (type === "t") return { seconds: "", done: false };
+  if (type === "t") return { seconds: "", distance: "", heartRate: "", done: false };
   if (type === "b") return { reps: "", done: false };
   return { weight: "", reps: "", done: false };
 };
@@ -268,13 +268,13 @@ const isSetValid = (set, type) => {
 };
 
 const formatSetShort = (set, type) => {
-  if (type === "t") return fmtSec(set.seconds);
+  if (type === "t") { let r = fmtSec(set.seconds); if (set.distance) r += ` · ${set.distance}km`; return r; }
   if (type === "b") return `${set.reps} reps`;
   return `${set.weight}×${set.reps}`;
 };
 
 const formatSetDetail = (set, type) => {
-  if (type === "t") return fmtSec(set.seconds);
+  if (type === "t") return <>{fmtSec(set.seconds)}{set.distance ? <span style={{ opacity: 0.5 }}> · {set.distance} km</span> : null}{set.heartRate ? <span style={{ opacity: 0.5 }}> · {set.heartRate} bpm</span> : null}</>;
   if (type === "b") return `${set.reps} reps`;
   return <>{set.weight} kg <span style={{ opacity: 0.5 }}>×</span> {set.reps} reps</>;
 };
@@ -399,7 +399,7 @@ function WorkoutTracker() {
       const info = getExerciseInfo(exercises[exIdx].exerciseId);
       const lastSet = exercises[exIdx].sets[exercises[exIdx].sets.length - 1];
       const newS = { ...emptySet(info?.type || "s"), done: !!editingWorkout };
-      if (info?.type === "t") newS.seconds = lastSet?.seconds || "";
+      if (info?.type === "t") { newS.seconds = lastSet?.seconds || ""; newS.distance = lastSet?.distance || ""; newS.heartRate = lastSet?.heartRate || ""; }
       else if (info?.type === "b") newS.reps = lastSet?.reps || "";
       else { newS.weight = lastSet?.weight || ""; newS.reps = lastSet?.reps || ""; }
       exercises[exIdx] = { ...exercises[exIdx], sets: [...exercises[exIdx].sets, newS] };
@@ -498,7 +498,8 @@ function WorkoutTracker() {
         if (ex.exerciseId === exerciseId) {
           if (t === "t") {
             const best = ex.sets.reduce((b, s) => Math.max(b, Number(s.seconds || 0)), 0);
-            if (best > 0) data.push({ date: w.date, seconds: best });
+            const bestDist = ex.sets.reduce((b, s) => Math.max(b, Number(s.distance || 0)), 0);
+            if (best > 0) data.push({ date: w.date, seconds: best, distance: bestDist || undefined });
           } else if (t === "b") {
             const best = ex.sets.reduce((b, s) => Math.max(b, Number(s.reps || 0)), 0);
             if (best > 0) data.push({ date: w.date, reps: best });
@@ -558,23 +559,49 @@ function WorkoutTracker() {
     const t = info?.type || "s";
 
     if (t === "t") {
+      const totalSec = Number(set.seconds) || 0;
+      const mins = set.seconds ? Math.floor(totalSec / 60) : "";
+      const secs = set.seconds ? totalSec % 60 : "";
+      const setTime = (newMins, newSecs) => {
+        const m = Number(newMins) || 0;
+        const s = Number(newSecs) || 0;
+        updateSet(exIdx, setIdx, "seconds", String(m * 60 + s));
+      };
       return (
-        <div key={setIdx} style={{ display: "grid", gridTemplateColumns: "36px 1fr 44px 32px", gap: 8, marginBottom: 6, alignItems: "center" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: set.done ? C.success : C.textDim, textAlign: "center" }}>{setIdx + 1}</span>
-          <div style={{ position: "relative" }}>
-            <input type="number" inputMode="numeric" placeholder="0" value={set.seconds}
-              onChange={(e) => updateSet(exIdx, setIdx, "seconds", e.target.value)}
-              style={{ ...inputStyle(set.done), paddingRight: 30 }} />
-            <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: C.textDim, pointerEvents: "none" }}>seg</span>
+        <div key={setIdx} style={{ marginBottom: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 32px", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: set.done ? C.success : C.textDim, textAlign: "center" }}>{setIdx + 1}</span>
+            <input type="number" inputMode="numeric" placeholder="0" value={mins}
+              onChange={(e) => setTime(e.target.value, secs)}
+              style={inputStyle(set.done)} />
+            <input type="number" inputMode="numeric" placeholder="0" value={secs}
+              onChange={(e) => setTime(mins, e.target.value)}
+              style={inputStyle(set.done)} />
+            <button onClick={() => toggleSetDone(exIdx, setIdx)} style={{
+              width: 44, height: 40, borderRadius: 10, border: `1px solid ${set.done ? C.success : C.border}`,
+              background: set.done ? C.success : "transparent", color: set.done ? "#000" : C.textDim,
+              fontSize: 16, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+            }}>✓</button>
+            <button onClick={() => removeSet(exIdx, setIdx)} style={{
+              width: 32, height: 40, borderRadius: 10, border: "none", background: "transparent", color: C.textDim, fontSize: 16, cursor: "pointer",
+            }}>×</button>
           </div>
-          <button onClick={() => toggleSetDone(exIdx, setIdx)} style={{
-            width: 44, height: 40, borderRadius: 10, border: `1px solid ${set.done ? C.success : C.border}`,
-            background: set.done ? C.success : "transparent", color: set.done ? "#000" : C.textDim,
-            fontSize: 16, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
-          }}>✓</button>
-          <button onClick={() => removeSet(exIdx, setIdx)} style={{
-            width: 32, height: 40, borderRadius: 10, border: "none", background: "transparent", color: C.textDim, fontSize: 16, cursor: "pointer",
-          }}>×</button>
+          <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 32px", gap: 8, marginTop: 4, alignItems: "center" }}>
+            <span></span>
+            <div style={{ position: "relative" }}>
+              <input type="number" inputMode="decimal" placeholder="—" value={set.distance || ""}
+                onChange={(e) => updateSet(exIdx, setIdx, "distance", e.target.value)}
+                style={{ ...inputStyle(set.done), fontSize: 13, padding: "7px 32px 7px 8px" }} />
+              <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: C.textDim, pointerEvents: "none" }}>km</span>
+            </div>
+            <div style={{ position: "relative" }}>
+              <input type="number" inputMode="numeric" placeholder="—" value={set.heartRate || ""}
+                onChange={(e) => updateSet(exIdx, setIdx, "heartRate", e.target.value)}
+                style={{ ...inputStyle(set.done), fontSize: 13, padding: "7px 34px 7px 8px" }} />
+              <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: C.textDim, pointerEvents: "none" }}>bpm</span>
+            </div>
+            <span></span><span></span>
+          </div>
         </div>
       );
     }
@@ -620,9 +647,10 @@ function WorkoutTracker() {
 
   const renderSetHeader = (type) => {
     if (type === "t") return (
-      <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 44px 32px", gap: 8, marginBottom: 8, padding: "0 2px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 32px", gap: 8, marginBottom: 8, padding: "0 2px" }}>
         <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SET</span>
-        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SEGUNDOS</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>MIN</span>
+        <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>SEG</span>
         <span style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>✓</span><span></span>
       </div>
     );
@@ -920,7 +948,7 @@ function WorkoutTracker() {
   };
 
   const exportCSV = () => {
-    const rows = [["Fecha", "Ejercicio", "Grupo", "Tipo", "Serie", "Peso (kg)", "Reps", "Segundos"]];
+    const rows = [["Fecha", "Ejercicio", "Grupo", "Tipo", "Serie", "Peso (kg)", "Reps", "Segundos", "Distancia (km)", "Pulsaciones"]];
     filteredWorkouts.forEach((w) => {
       const date = new Date(w.date).toLocaleDateString("es-ES");
       w.exercises.forEach((ex) => {
@@ -933,6 +961,8 @@ function WorkoutTracker() {
             t === "s" ? (s.weight || "") : "",
             t !== "t" ? (s.reps || "") : "",
             t === "t" ? (s.seconds || "") : "",
+            t === "t" ? (s.distance || "") : "",
+            t === "t" ? (s.heartRate || "") : "",
           ]);
         });
       });
@@ -1179,7 +1209,7 @@ function WorkoutTracker() {
     const t = info?.type || "s";
 
     const charts = t === "t"
-      ? [{ label: "MEJOR TIEMPO (seg)", key: "seconds", color: C.accent }]
+      ? [{ label: "MEJOR TIEMPO", key: "seconds", color: C.accent, fmt: (v) => fmtSec(v) }, ...(data.some((d) => d.distance) ? [{ label: "DISTANCIA (km)", key: "distance", color: C.success }] : [])]
       : t === "b"
       ? [{ label: "MÁXIMAS REPS", key: "reps", color: C.accent }]
       : [
@@ -1211,7 +1241,7 @@ function WorkoutTracker() {
                   <div style={{ display: "flex", alignItems: "end", gap: 4, height: 120 }}>
                     {data.slice(-12).map((d, i) => (
                       <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontSize: 10, color: C.textDim }}>{d[chart.key]}</span>
+                        <span style={{ fontSize: 10, color: C.textDim }}>{chart.fmt ? chart.fmt(d[chart.key]) : d[chart.key]}</span>
                         <div style={{
                           width: "100%", height: `${maxVal ? ((d[chart.key] || 0) / maxVal) * 80 : 0}px`,
                           background: `linear-gradient(to top, ${chart.color}, ${chart.color}90)`,
@@ -1232,7 +1262,7 @@ function WorkoutTracker() {
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: i < data.length - 1 ? `1px solid ${C.border}` : "none" }}>
                   <span style={{ fontSize: 13, color: C.textDim }}>{formatDate(d.date)}</span>
                   <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                    {t === "t" ? fmtSec(d.seconds) : t === "b" ? `${d.reps} reps` : `${d.weight} kg × ${d.reps}`}
+                    {t === "t" ? (fmtSec(d.seconds) + (d.distance ? ` · ${d.distance}km` : "")) : t === "b" ? `${d.reps} reps` : `${d.weight} kg × ${d.reps}`}
                   </span>
                 </div>
               ))}
@@ -1275,7 +1305,7 @@ function WorkoutTracker() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {prog.length > 0 && (
                     <span style={{ fontSize: 13, color: C.textDim }}>
-                      {t === "t" ? fmtSec(prog[prog.length - 1].seconds) : t === "b" ? `${prog[prog.length - 1].reps} reps` : `${prog[prog.length - 1].weight} kg`} · {prog.length}×
+                      {t === "t" ? (fmtSec(prog[prog.length - 1].seconds) + (prog[prog.length - 1].distance ? ` · ${prog[prog.length - 1].distance}km` : "")) : t === "b" ? `${prog[prog.length - 1].reps} reps` : `${prog[prog.length - 1].weight} kg`} · {prog.length}×
                     </span>
                   )}
                   {isCustom && (
