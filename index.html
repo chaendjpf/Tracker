@@ -361,6 +361,46 @@ function WorkoutTracker() {
   useEffect(() => { if (loaded) { try { localStorage.setItem(WEIGHT_KEY, JSON.stringify(weightLog)); } catch {} } }, [weightLog, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_SETTINGS_KEY, JSON.stringify(nutSettings)); } catch {} } }, [nutSettings, loaded]);
 
+  const backupAllData = () => {
+    const data = {
+      version: 1,
+      date: new Date().toISOString(),
+      workouts,
+      nutritionLog,
+      weightLog,
+      nutSettings,
+      customExercises,
+      customFoods,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const restoreFromBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.workouts && !data.nutritionLog) { alert("Archivo no válido"); return; }
+        if (!confirm(`¿Restaurar backup del ${new Date(data.date).toLocaleDateString("es-ES")}? Esto reemplazará TODOS los datos actuales.`)) return;
+        if (data.workouts) setWorkouts(data.workouts);
+        if (data.nutritionLog) setNutritionLog(data.nutritionLog);
+        if (data.weightLog) setWeightLog(data.weightLog);
+        if (data.nutSettings) setNutSettings(data.nutSettings);
+        if (data.customExercises) setCustomExercises(data.customExercises);
+        if (data.customFoods) setCustomFoods(data.customFoods);
+        setNutView("summary");
+        alert("Datos restaurados correctamente");
+      } catch { alert("Error al leer el archivo de backup"); }
+    };
+    reader.readAsText(file);
+  };
+
   const startWorkout = () => { setActiveWorkout({ exercises: [], date: new Date().toISOString() }); setView("workout"); };
 
   // Generic workout state updater — works for both active and editing
@@ -1996,6 +2036,26 @@ function WorkoutTracker() {
             ))}
           </div>
           <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 12 }}>El basal se aplica como valor por defecto a días nuevos. Puedes editarlo por día.</p>
+
+          <div style={{ marginTop: 28, marginBottom: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: font }}>Backup / Restaurar</div>
+            <button onClick={backupAllData} style={{
+              width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.accent}40`,
+              background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 10,
+            }}>Descargar backup completo</button>
+            <label style={{
+              display: "block", width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
+              background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "center",
+              boxSizing: "border-box",
+            }}>
+              Restaurar desde archivo
+              <input type="file" accept=".json" onChange={(e) => { if (e.target.files[0]) restoreFromBackup(e.target.files[0]); e.target.value = ""; }}
+                style={{ display: "none" }} />
+            </label>
+            <p style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 8 }}>
+              El backup incluye entrenamientos, nutrición, peso, ejercicios y alimentos personalizados.
+            </p>
+          </div>
 
           {workouts.length === 0 && Object.keys(nutritionLog).length === 0 && (
           <button onClick={() => {
