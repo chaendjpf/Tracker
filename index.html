@@ -1593,7 +1593,7 @@ function WorkoutTracker() {
                 <div style={{ fontSize: 11, color: C.textDim }}>kcal ingeridas</div>
               </div>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: "#a78bfa", fontFamily: font }}>{dayTotals.prot}g</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: "#a78bfa", fontFamily: font }}>{parseFloat(dayTotals.prot.toFixed(1))}g</div>
                 <div style={{ fontSize: 11, color: C.textDim }}>proteína {protPct > 0 ? `(${protPct}%)` : ""}</div>
               </div>
             </div>
@@ -1749,7 +1749,7 @@ function WorkoutTracker() {
                 style={{ ...baseCard, marginBottom: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{m.name}</div>
-                  <div style={{ fontSize: 12, color: C.textDim }}>{m.grams ? `${m.grams}g · ` : ""}{m.cal} kcal · {m.prot}g prot</div>
+                  <div style={{ fontSize: 12, color: C.textDim }}>{m.grams ? `${m.grams}g · ` : ""}{m.cal} kcal · {parseFloat(Number(m.prot).toFixed(1))}g prot</div>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); removeMeal(m.id); }} style={{ background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px" }}>✕</button>
               </div>
