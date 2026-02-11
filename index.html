@@ -162,6 +162,21 @@ const DEFAULT_EXERCISES = {
     { id: "stairmaster", name: "Stairmaster", emoji: "🪜", type: "t" },
     { id: "jump_rope", name: "Comba", emoji: "⏭️", type: "t" },
   ],
+  "Cross Training": [
+    { id: "ct_kb_swing", name: "Kettlebell Swing", emoji: "🔔", type: "s" },
+    { id: "ct_thruster", name: "Thrusters", emoji: "🏋️", type: "s" },
+    { id: "ct_mountain_climber", name: "Escaladores", emoji: "🧗", type: "b" },
+    { id: "ct_reverse_lunge", name: "Zancadas Atrás", emoji: "🦵", type: "b" },
+    { id: "ct_pushup", name: "Flexiones", emoji: "🫳", type: "b" },
+    { id: "ct_burpee", name: "Burpees", emoji: "💥", type: "b" },
+    { id: "ct_plank", name: "Plancha Abdominal", emoji: "🧘", type: "t" },
+    { id: "ct_box_jump", name: "Box Jump", emoji: "📦", type: "b" },
+    { id: "ct_wall_ball", name: "Wall Ball", emoji: "🏐", type: "s" },
+    { id: "ct_battle_rope", name: "Battle Rope", emoji: "🪢", type: "t" },
+    { id: "ct_goblet_squat", name: "Goblet Squat", emoji: "🦵", type: "s" },
+    { id: "ct_jumping_jack", name: "Jumping Jacks", emoji: "⭐", type: "b" },
+    { id: "ct_devil_press", name: "Devil Press", emoji: "😈", type: "s" },
+  ],
 };
 
 const CUSTOM_EXERCISES_KEY = "gym-tracker-custom-exercises";
@@ -295,6 +310,7 @@ function WorkoutTracker() {
   const [newExType, setNewExType] = useState("s");
   const [prevView, setPrevView] = useState("home");
   const [editingWorkout, setEditingWorkout] = useState(null);
+  const [circuitConfig, setCircuitConfig] = useState(null); // { rounds, workTime, restTime }
 
   // ── Custom foods ──
   const [customFoods, setCustomFoods] = useState([]);
@@ -403,6 +419,26 @@ function WorkoutTracker() {
 
   const startWorkout = () => { setActiveWorkout({ exercises: [], date: new Date().toISOString() }); setView("workout"); };
 
+  const startCircuitSetup = () => {
+    setCircuitConfig({ rounds: 4, workTime: 40, restTime: 20 });
+    setActiveWorkout({ exercises: [], date: new Date().toISOString() });
+    setView("circuit-setup");
+  };
+
+  const saveCircuit = () => {
+    if (!activeWorkout || activeWorkout.exercises.length === 0 || !circuitConfig) return;
+    const w = {
+      id: Date.now().toString(),
+      date: activeWorkout.date,
+      circuit: { ...circuitConfig, completedRounds: circuitConfig.rounds },
+      exercises: activeWorkout.exercises.map((ex) => ({ exerciseId: ex.exerciseId, sets: [] })),
+    };
+    setWorkouts((prev) => [w, ...prev]);
+    setActiveWorkout(null);
+    setCircuitConfig(null);
+    setView("home");
+  };
+
   // Generic workout state updater — works for both active and editing
   const getWState = () => editingWorkout ? [editingWorkout, setEditingWorkout] : [activeWorkout, setActiveWorkout];
 
@@ -413,7 +449,7 @@ function WorkoutTracker() {
       ...w,
       exercises: [...w.exercises, { exerciseId: exercise.id, sets: [{ ...emptySet(info.type || "s"), done: !!editingWorkout }] }],
     }));
-    setView(editingWorkout ? "detail" : "workout"); setExerciseFilter(null); setSearchQuery("");
+    setView(editingWorkout ? "detail" : circuitConfig ? "circuit-setup" : "workout"); setExerciseFilter(null); setSearchQuery("");
   };
 
   const updateSet = (exIdx, setIdx, field, value) => {
@@ -713,6 +749,12 @@ function WorkoutTracker() {
 
   // ═══ HOME ═══
   const repeatWorkout = (w) => {
+    if (w.circuit) {
+      setCircuitConfig({ rounds: w.circuit.rounds, workTime: w.circuit.workTime, restTime: w.circuit.restTime });
+      setActiveWorkout({ exercises: w.exercises.map((ex) => ({ exerciseId: ex.exerciseId, sets: [] })), date: new Date().toISOString() });
+      setView("circuit-setup");
+      return;
+    }
     const newExercises = w.exercises.map((ex) => {
       const info = getExerciseInfo(ex.exerciseId);
       const t = info?.type || "s";
@@ -727,6 +769,104 @@ function WorkoutTracker() {
     });
     setActiveWorkout({ exercises: newExercises, date: new Date().toISOString() });
     setView("workout");
+  };
+
+  // ═══ CIRCUIT SETUP ═══
+  const removeCircuitExercise = (idx) => {
+    setActiveWorkout((w) => ({ ...w, exercises: w.exercises.filter((_, i) => i !== idx) }));
+  };
+
+  const renderCircuitSetup = () => {
+    if (!circuitConfig) return null;
+    const stepBtn = { width: 44, height: 44, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 20, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+    const exCount = activeWorkout?.exercises.length || 0;
+    const estSec = circuitConfig.rounds * exCount * (circuitConfig.workTime + circuitConfig.restTime);
+
+    return (
+      <div style={{ padding: "0 20px 100px" }}>
+        <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => { setCircuitConfig(null); setActiveWorkout(null); setView("home"); }}
+            style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Registrar Circuito</h1>
+        </div>
+
+        <div style={{ ...baseCard, marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#a855f7", marginBottom: 14 }}>Configuración</div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8 }}>RONDAS</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button onClick={() => setCircuitConfig((p) => ({ ...p, rounds: Math.max(1, p.rounds - 1) }))} style={stepBtn}>−</button>
+              <span style={{ fontSize: 28, fontWeight: 800, color: C.text, minWidth: 40, textAlign: "center", fontFamily: font }}>{circuitConfig.rounds}</span>
+              <button onClick={() => setCircuitConfig((p) => ({ ...p, rounds: Math.min(20, p.rounds + 1) }))} style={stepBtn}>+</button>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8 }}>TRABAJO (seg)</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[20, 30, 40, 45, 50, 60].map((t) => (
+                <button key={t} onClick={() => setCircuitConfig((p) => ({ ...p, workTime: t }))} style={{
+                  padding: "8px 14px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${circuitConfig.workTime === t ? "#a855f7" : C.border}`,
+                  background: circuitConfig.workTime === t ? "rgba(168,85,247,0.15)" : "transparent",
+                  color: circuitConfig.workTime === t ? "#a855f7" : C.textDim,
+                }}>{t}s</button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8 }}>DESCANSO (seg)</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[10, 15, 20, 25, 30].map((t) => (
+                <button key={t} onClick={() => setCircuitConfig((p) => ({ ...p, restTime: t }))} style={{
+                  padding: "8px 14px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${circuitConfig.restTime === t ? "#a855f7" : C.border}`,
+                  background: circuitConfig.restTime === t ? "rgba(168,85,247,0.15)" : "transparent",
+                  color: circuitConfig.restTime === t ? "#a855f7" : C.textDim,
+                }}>{t}s</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ ...baseCard, marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Ejercicios ({exCount})</div>
+          {activeWorkout?.exercises.map((ex, i) => {
+            const info = getExerciseInfo(ex.exerciseId);
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0",
+                borderBottom: i < exCount - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 12, color: C.textDim, width: 24, textAlign: "center" }}>{i + 1}</span>
+                <span style={{ fontSize: 18 }}>{info?.emoji || "⭐"}</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.text }}>{info?.name || ex.exerciseId}</span>
+                <button onClick={() => removeCircuitExercise(i)}
+                  style={{ background: "none", border: "none", color: C.textDim, fontSize: 16, cursor: "pointer", padding: "4px 8px" }}>✕</button>
+              </div>
+            );
+          })}
+          <button onClick={() => setView("picker")} style={{
+            width: "100%", padding: "12px", borderRadius: 10, border: `1px dashed ${C.accent}40`,
+            background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 10,
+          }}>+ Añadir Ejercicio</button>
+        </div>
+
+        {exCount > 0 && (
+          <div style={{ textAlign: "center", fontSize: 13, color: C.textDim, marginBottom: 16 }}>
+            Duración estimada: ~{fmtSec(estSec)}
+          </div>
+        )}
+
+        <button onClick={saveCircuit} disabled={exCount === 0} style={{
+          width: "100%", padding: "18px", borderRadius: 16, border: "none",
+          background: exCount > 0 ? "linear-gradient(135deg, #a855f7, #c084fc)" : C.card,
+          color: exCount > 0 ? "#fff" : C.textDim,
+          fontSize: 17, fontWeight: 700, cursor: exCount > 0 ? "pointer" : "default",
+          boxShadow: exCount > 0 ? "0 4px 24px rgba(168,85,247,0.3)" : "none",
+        }}>Guardar Circuito</button>
+      </div>
+    );
   };
 
   const renderHome = () => {
@@ -779,9 +919,15 @@ function WorkoutTracker() {
       <button onClick={startWorkout} style={{
         width: "100%", padding: "18px", borderRadius: 16, border: "none",
         background: `linear-gradient(135deg, ${C.accent}, #ff8f35)`, color: "#fff",
-        fontSize: 17, fontWeight: 700, cursor: "pointer", marginBottom: 24,
+        fontSize: 17, fontWeight: 700, cursor: "pointer", marginBottom: 10,
         fontFamily: font, boxShadow: `0 4px 24px ${C.accentGlow}`,
       }}>+ Empezar Entrenamiento</button>
+      <button onClick={startCircuitSetup} style={{
+        width: "100%", padding: "16px", borderRadius: 16, border: "none",
+        background: "linear-gradient(135deg, #a855f7, #c084fc)", color: "#fff",
+        fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 24,
+        fontFamily: font, boxShadow: "0 4px 24px rgba(168,85,247,0.3)",
+      }}>Registrar Circuito</button>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Últimas sesiones</h2>
@@ -803,11 +949,12 @@ function WorkoutTracker() {
           <div key={w.id} style={{ ...baseCard, marginBottom: 10, display: "flex", alignItems: "center" }}>
             <div onClick={() => { setSelectedWorkout(w); setPrevView("home"); setView("detail"); }}
               style={{ flex: 1, cursor: "pointer" }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-                {w.exercises.map((e) => getExerciseInfo(e.exerciseId)?.group).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Sesión"}
+              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+                <span>{w.circuit ? "Circuito" : w.exercises.map((e) => getExerciseInfo(e.exerciseId)?.group).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Sesión"}</span>
+                {w.circuit && <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 6, background: "rgba(168,85,247,0.15)", color: "#a855f7", fontWeight: 700 }}>CT</span>}
               </div>
               <div style={{ fontSize: 13, color: C.textDim }}>
-                {formatDate(w.date)} · {totalSets(w)} series{vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}
+                {formatDate(w.date)} · {w.circuit ? `${w.circuit.rounds}R · ${w.circuit.workTime}s/${w.circuit.restTime}s` : `${totalSets(w)} series${vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}`}
               </div>
             </div>
             <button onClick={(e) => { e.stopPropagation(); repeatWorkout(w); }} title="Repetir entrenamiento" style={{
@@ -866,7 +1013,7 @@ function WorkoutTracker() {
     return (
       <div style={{ padding: "0 20px 100px" }}>
         <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={() => { setView(editingWorkout ? "detail" : "workout"); setExerciseFilter(null); setSearchQuery(""); }}
+          <button onClick={() => { setView(editingWorkout ? "detail" : circuitConfig ? "circuit-setup" : "workout"); setExerciseFilter(null); setSearchQuery(""); }}
             style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Añadir Ejercicio</h1>
         </div>
@@ -1188,10 +1335,15 @@ function WorkoutTracker() {
             style={{ ...baseCard, marginBottom: 10, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 8 }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{formatDate(w.date)}</div>
-                <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>{totalSets(w)} series</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{formatDate(w.date)}</span>
+                  {w.circuit && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: "rgba(168,85,247,0.15)", color: "#a855f7", fontWeight: 700 }}>CIRCUITO</span>}
+                </div>
+                <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>
+                  {w.circuit ? `${w.circuit.rounds} rondas · ${w.circuit.workTime}s/${w.circuit.restTime}s` : `${totalSets(w)} series`}
+                </div>
               </div>
-              {vol > 0 && <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>{(vol / 1000).toFixed(1)}k kg</div>}
+              {!w.circuit && vol > 0 && <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>{(vol / 1000).toFixed(1)}k kg</div>}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {w.exercises.map((ex, i) => {
@@ -1238,7 +1390,7 @@ function WorkoutTracker() {
               <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>{formatFullDate(w.date)}</h1>
             )}
             <p style={{ margin: "2px 0 0", fontSize: 13, color: C.textDim }}>
-              {totalSets(w)} series{vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}
+              {w.circuit ? `${w.circuit.rounds} rondas · ${w.circuit.workTime}s/${w.circuit.restTime}s` : `${totalSets(w)} series${vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}`}
               {isEditing && <span style={{ color: C.accent, marginLeft: 8 }}>· editando</span>}
             </p>
           </div>
@@ -1254,6 +1406,16 @@ function WorkoutTracker() {
             }}>Guardar ✓</button>
           )}
         </div>
+
+        {w.circuit && !isEditing && (
+          <div style={{ ...baseCard, marginBottom: 14, background: "rgba(168,85,247,0.08)", borderColor: "rgba(168,85,247,0.3)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, textAlign: "center" }}>
+              <div><div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font }}>{w.circuit.rounds}</div><div style={{ fontSize: 11, color: C.textDim }}>Rondas</div></div>
+              <div><div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font }}>{w.circuit.workTime}s</div><div style={{ fontSize: 11, color: C.textDim }}>Trabajo</div></div>
+              <div><div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font }}>{w.circuit.restTime}s</div><div style={{ fontSize: 11, color: C.textDim }}>Descanso</div></div>
+            </div>
+          </div>
+        )}
 
         {w.exercises.map((ex, exIdx) => {
           const info = getExerciseInfo(ex.exerciseId);
@@ -2135,7 +2297,7 @@ function WorkoutTracker() {
     </div>
   );
 
-  const showTabBar = !["workout", "picker"].includes(view) && !editingWorkout;
+  const showTabBar = !["workout", "picker", "circuit-setup"].includes(view) && !editingWorkout;
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", fontFamily: fontBody, color: C.text, position: "relative" }}>
@@ -2147,6 +2309,7 @@ function WorkoutTracker() {
       {view === "detail" && renderDetail()}
       {view === "progress" && renderProgress()}
       {view === "exercises" && renderExercises()}
+      {view === "circuit-setup" && renderCircuitSetup()}
       {showTabBar && (
         <div style={{
           position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
