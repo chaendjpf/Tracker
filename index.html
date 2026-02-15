@@ -230,6 +230,7 @@ const FOOD_DB = [
   { id: "ensalada", name: "Ensalada variada", group: "Verdura", cal: 18, prot: 0.8 },
   { id: "brocoli", name: "Brócoli", group: "Verdura", cal: 35, prot: 2 },
   { id: "gazpacho", name: "Gazpacho", group: "Verdura", cal: 45, prot: 0.8 },
+  { id: "esparragos", name: "Espárragos", group: "Verdura", cal: 19, prot: 1.3 },
   { id: "allbran", name: "All Bran", group: "Cereales", cal: 335, prot: 14 },
   { id: "pan", name: "Pan Artesano", group: "Cereales", cal: 243, prot: 10 },
   { id: "avena", name: "Avena", group: "Cereales", cal: 372, prot: 10 },
@@ -571,14 +572,38 @@ function WorkoutTracker() {
     setPlans((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const getExerciseMaxWeight = (exerciseId) => {
+    let maxW = 0, repsAtMax = 0;
+    for (const w of workouts) for (const ex of w.exercises) if (ex.exerciseId === exerciseId) {
+      for (const s of ex.sets) {
+        const sw = Number(s.weight) || 0;
+        if (sw > maxW) { maxW = sw; repsAtMax = Number(s.reps) || 0; }
+      }
+    }
+    return maxW > 0 ? { weight: maxW, reps: repsAtMax } : null;
+  };
+
   const addExerciseToPlan = (exercise) => {
+    const best = getExerciseMaxWeight(exercise.id);
     setEditingPlan((p) => ({
       ...p,
-      exercises: [...p.exercises, { exerciseId: exercise.id, numSets: 3 }],
+      exercises: [...p.exercises, {
+        exerciseId: exercise.id, numSets: 3,
+        reps: best ? String(best.reps) : "",
+        weight: best ? String(best.weight) : "",
+      }],
     }));
     setView("plan-edit");
     setExerciseFilter(null);
     setSearchQuery("");
+  };
+
+  const updatePlanExercise = (idx, field, value) => {
+    setEditingPlan((p) => {
+      const exercises = [...p.exercises];
+      exercises[idx] = { ...exercises[idx], [field]: value };
+      return { ...p, exercises };
+    });
   };
 
   const removeExerciseFromPlan = (idx) => {
@@ -601,9 +626,12 @@ function WorkoutTracker() {
       .filter((ex) => getExerciseInfo(ex.exerciseId))
       .map((ex) => {
         const info = getExerciseInfo(ex.exerciseId);
+        const base = emptySet(info.type || "s");
+        if (ex.weight) base.weight = ex.weight;
+        if (ex.reps) base.reps = ex.reps;
         return {
           exerciseId: ex.exerciseId,
-          sets: Array.from({ length: ex.numSets }, () => ({ ...emptySet(info.type || "s"), done: false })),
+          sets: Array.from({ length: ex.numSets }, () => ({ ...base, done: false })),
         };
       });
     setActiveWorkout({ exercises, date: new Date().toISOString() });
@@ -615,7 +643,13 @@ function WorkoutTracker() {
       id: Date.now().toString(),
       name: workout.exercises.map((e) => getExerciseInfo(e.exerciseId)?.group).filter((v, i, a) => a.indexOf(v) === i).join(" + ") || "Plan sin nombre",
       createdAt: new Date().toISOString(),
-      exercises: workout.exercises.map((ex) => ({ exerciseId: ex.exerciseId, numSets: ex.sets.length })),
+      exercises: workout.exercises.map((ex) => {
+        const best = ex.sets.reduce((b, s) => {
+          const w = Number(s.weight) || 0;
+          return w > (Number(b.weight) || 0) ? { weight: String(w), reps: s.reps || "" } : b;
+        }, { weight: "", reps: ex.sets[0]?.reps || "" });
+        return { exerciseId: ex.exerciseId, numSets: ex.sets.length, reps: best.reps, weight: best.weight };
+      }),
     };
     setPlans((prev) => [...prev, plan]);
   };
@@ -1232,7 +1266,7 @@ function WorkoutTracker() {
                   <span key={i} style={{
                     padding: "4px 10px", borderRadius: 8, background: "rgba(255,255,255,0.05)",
                     fontSize: 12, color: C.textDim,
-                  }}>{info.emoji} {info.name} ×{ex.numSets}</span>
+                  }}>{info.emoji} {info.name} {ex.numSets}×{ex.reps || "?"}{ex.weight ? ` ${ex.weight}kg` : ""}</span>
                 );
               })}
             </div>
@@ -1288,26 +1322,42 @@ function WorkoutTracker() {
           const info = getExerciseInfo(ex.exerciseId);
           if (!info) return null;
           return (
-            <div key={idx} style={{ ...baseCard, marginBottom: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 20 }}>{info.emoji}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{info.name}</div>
-                <div style={{ fontSize: 12, color: C.textDim }}>{info.group} · {TYPE_TAGS[info.type || "s"]}</div>
+            <div key={idx} style={{ ...baseCard, marginBottom: 8, padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 20 }}>{info.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{info.name}</div>
+                  <div style={{ fontSize: 12, color: C.textDim }}>{info.group} · {TYPE_TAGS[info.type || "s"]}</div>
+                </div>
+                <button onClick={() => removeExerciseFromPlan(idx)} style={{
+                  background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px",
+                }}>✕</button>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => updatePlanSets(idx, -1)} style={{
-                  width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
-                  background: "transparent", color: C.text, fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                }}>−</button>
-                <span style={{ fontSize: 16, fontWeight: 700, color: C.accent, minWidth: 24, textAlign: "center" }}>{ex.numSets}</span>
-                <button onClick={() => updatePlanSets(idx, 1)} style={{
-                  width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
-                  background: "transparent", color: C.text, fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                }}>+</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button onClick={() => updatePlanSets(idx, -1)} style={{
+                    width: 28, height: 28, borderRadius: 7, border: `1px solid ${C.border}`,
+                    background: "transparent", color: C.text, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>−</button>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: C.accent, minWidth: 20, textAlign: "center" }}>{ex.numSets}</span>
+                  <button onClick={() => updatePlanSets(idx, 1)} style={{
+                    width: 28, height: 28, borderRadius: 7, border: `1px solid ${C.border}`,
+                    background: "transparent", color: C.text, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>+</button>
+                  <span style={{ fontSize: 11, color: C.textDim, marginLeft: 2 }}>series</span>
+                </div>
+                <div style={{ width: 1, height: 20, background: C.border }} />
+                <input type="number" inputMode="numeric" placeholder="reps" value={ex.reps || ""}
+                  onChange={(e) => updatePlanExercise(idx, "reps", e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  style={{ width: 52, padding: "6px 4px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 14, fontWeight: 600, textAlign: "center", outline: "none", boxSizing: "border-box" }} />
+                <span style={{ fontSize: 11, color: C.textDim }}>×</span>
+                <input type="number" inputMode="decimal" placeholder="kg" value={ex.weight || ""}
+                  onChange={(e) => updatePlanExercise(idx, "weight", e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  style={{ width: 58, padding: "6px 4px", borderRadius: 8, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.04)", color: C.text, fontSize: 14, fontWeight: 600, textAlign: "center", outline: "none", boxSizing: "border-box" }} />
+                <span style={{ fontSize: 11, color: C.textDim }}>kg</span>
               </div>
-              <button onClick={() => removeExerciseFromPlan(idx)} style={{
-                background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px",
-              }}>✕</button>
             </div>
           );
         })}
