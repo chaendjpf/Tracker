@@ -327,7 +327,7 @@ function WorkoutTracker() {
   const [weightLog, setWeightLog] = useState([]); // [{ date: "2026-02-08", weight: 80 }]
   const [nutSettings, setNutSettings] = useState({ basalCal: 2000, protTarget: 150 });
   const [nutDate, setNutDate] = useState(new Date().toISOString().slice(0, 10));
-  const [nutView, setNutView] = useState("summary"); // summary | addMeal | addManual | settings | weightLog
+  const [nutView, setNutView] = useState("summary"); // summary | addMeal | addManual | weightLog
   const [nutFoodFilter, setNutFoodFilter] = useState(null);
   const [nutFoodSearch, setNutFoodSearch] = useState("");
   const [nutSelectedFood, setNutSelectedFood] = useState(null);
@@ -339,6 +339,7 @@ function WorkoutTracker() {
   const [nutEditingMeal, setNutEditingMeal] = useState(null);
   const [nutChartFilter, setNutChartFilter] = useState("1m");
   const [nutShowChart, setNutShowChart] = useState(false);
+  const [nutExportFilter, setNutExportFilter] = useState("all");
 
   // ── Plans state ──
   const [plans, setPlans] = useState([]);
@@ -956,12 +957,6 @@ function WorkoutTracker() {
   };
 
   const renderHome = () => {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const todayNut = getDayLog(todayKey);
-    const nutCal = todayNut.meals.reduce((s, m) => s + (m.cal || 0), 0);
-    const nutProt = todayNut.meals.reduce((s, m) => s + (m.prot || 0), 0);
-    const nutBalance = nutCal - todayNut.basalCal - todayNut.activityCal;
-
     return (
     <div style={{ padding: "0 20px 100px" }}>
       <div style={{ paddingTop: 16, marginBottom: 28 }}>
@@ -981,25 +976,6 @@ function WorkoutTracker() {
             <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
-      </div>
-
-      {/* Mini resumen nutrición hoy */}
-      <div onClick={() => { setNutDate(todayKey); setNutView("summary"); setView("nutrition"); }} style={{
-        ...baseCard, marginBottom: 20, cursor: "pointer", padding: "14px 16px",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 20 }}>🍽️</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-              Hoy: {nutCal} kcal · {Math.round(nutProt)}g prot
-            </div>
-            <div style={{ fontSize: 12, color: nutBalance >= 0 ? C.success : C.danger }}>
-              Balance: {nutBalance >= 0 ? "+" : ""}{nutBalance} kcal
-            </div>
-          </div>
-        </div>
-        <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
       </div>
 
       <button onClick={startWorkout} style={{
@@ -1058,23 +1034,6 @@ function WorkoutTracker() {
         );
       })}
 
-      {/* Acceso rápido a ejercicios */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24, marginBottom: 14 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Ejercicios</h2>
-        <button onClick={() => setView("exercises")} style={{
-          background: "none", border: "none", color: C.accent, fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0,
-        }}>Ver todos ›</button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {Object.entries(EXERCISES).slice(0, 6).map(([group, exs]) => (
-          <div key={group} onClick={() => { setView("exercises"); }} style={{
-            ...baseCard, padding: "14px 12px", cursor: "pointer", textAlign: "center",
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{group}</div>
-            <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>{exs.length} ejercicios</div>
-          </div>
-        ))}
-      </div>
     </div>
     );
   };
@@ -1896,15 +1855,33 @@ function WorkoutTracker() {
     setNutEditingMeal(null);
   };
 
+  const getFilteredNutLog = () => {
+    if (nutExportFilter === "all") return nutritionLog;
+    const now = new Date();
+    const ms = { "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365 };
+    const cutoff = new Date(now.getTime() - (ms[nutExportFilter] || 0) * 86400000).toISOString().slice(0, 10);
+    const filtered = {};
+    Object.entries(nutritionLog).forEach(([date, day]) => { if (date >= cutoff) filtered[date] = day; });
+    return filtered;
+  };
+
   const exportNutJSON = () => {
-    const data = { nutrition: nutritionLog, weight: weightLog, settings: nutSettings };
+    const log = getFilteredNutLog();
+    const filteredWeight = nutExportFilter === "all" ? weightLog : (() => {
+      const now = new Date();
+      const ms = { "1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365 };
+      const cutoff = new Date(now.getTime() - (ms[nutExportFilter] || 0) * 86400000).toISOString().slice(0, 10);
+      return weightLog.filter((w) => w.date >= cutoff);
+    })();
+    const data = { nutrition: log, weight: filteredWeight, settings: nutSettings };
     setExportData(JSON.stringify(data, null, 2));
     setExportType("JSON Nutrición");
   };
 
   const exportNutCSV = () => {
+    const log = getFilteredNutLog();
     const rows = [["Fecha", "Alimento", "Gramos", "Calorías", "Proteínas", "Basal", "Actividad", "Balance"]];
-    Object.entries(nutritionLog).sort(([a], [b]) => a.localeCompare(b)).forEach(([date, day]) => {
+    Object.entries(log).sort(([a], [b]) => a.localeCompare(b)).forEach(([date, day]) => {
       const totalCal = day.meals.reduce((s, m) => s + (m.cal || 0), 0);
       const balance = totalCal - (day.basalCal || 0) - (day.activityCal || 0);
       if (day.meals.length === 0) {
@@ -2156,21 +2133,33 @@ function WorkoutTracker() {
           })}
 
           {/* Bottom buttons */}
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button onClick={() => { setNutNewWeight(latestWeight ? String(latestWeight.weight) : ""); setNutView("weightLog"); }} style={{
-              flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>⚖️ Peso</button>
-            <button onClick={() => setNutView("settings")} style={{
-              flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer",
-            }}>⚙️ Objetivos</button>
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button onClick={exportNutJSON} style={{
-              flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            }}>Exportar JSON</button>
-            <button onClick={exportNutCSV} style={{
-              flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            }}>Exportar CSV</button>
+          <button onClick={() => { setNutNewWeight(latestWeight ? String(latestWeight.weight) : ""); setNutView("weightLog"); }} style={{
+            width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 16,
+          }}>⚖️ Peso</button>
+
+          {/* Export con filtros */}
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.textDim, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Exportar</div>
+            <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}` }}>
+              {[
+                { id: "all", label: "Todo" }, { id: "1w", label: "1S" }, { id: "1m", label: "1M" },
+                { id: "3m", label: "3M" }, { id: "6m", label: "6M" }, { id: "1y", label: "1A" },
+              ].map((f) => (
+                <button key={f.id} onClick={() => setNutExportFilter(f.id)} style={{
+                  flex: 1, padding: "7px 0", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  background: nutExportFilter === f.id ? C.accentDim : C.card,
+                  color: nutExportFilter === f.id ? C.accent : C.textDim,
+                }}>{f.label}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={exportNutJSON} style={{
+                flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>JSON</button>
+              <button onClick={exportNutCSV} style={{
+                flex: 1, padding: "10px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}>CSV</button>
+            </div>
           </div>
 
           {/* Export modal */}
@@ -2414,49 +2403,56 @@ function WorkoutTracker() {
       );
     }
 
-    // ── Settings ──
-    if (nutView === "settings") {
-      return (
-        <div style={{ padding: "0 20px 100px" }}>
-          <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => setNutView("summary")} style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>⚙️ Objetivos</h1>
-          </div>
-          <div style={{ ...baseCard, padding: 16 }}>
-            {[
-              { label: "Calorías basales por defecto", val: nutSettings.basalCal, key: "basalCal" },
-              { label: "Objetivo de proteínas (g)", val: nutSettings.protTarget, key: "protTarget" },
-            ].map((f) => (
-              <div key={f.key} style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6 }}>{f.label}</div>
-                <input type="number" value={f.val} onChange={(e) => setNutSettings((prev) => ({ ...prev, [f.key]: Number(e.target.value) || 0 }))}
-                  style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 18, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 12 }}>El basal se aplica como valor por defecto a días nuevos. Puedes editarlo por día.</p>
 
-          <div style={{ marginTop: 28, marginBottom: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: font }}>Backup / Restaurar</div>
-            <button onClick={backupAllData} style={{
-              width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.accent}40`,
-              background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 10,
-            }}>Descargar backup completo</button>
-            <label style={{
-              display: "block", width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
-              background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "center",
-              boxSizing: "border-box",
-            }}>
-              Restaurar desde archivo
-              <input type="file" accept=".json" onChange={(e) => { if (e.target.files[0]) restoreFromBackup(e.target.files[0]); e.target.value = ""; }}
-                style={{ display: "none" }} />
-            </label>
-            <p style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 8 }}>
-              El backup incluye entrenamientos, nutrición, peso, ejercicios y alimentos personalizados.
-            </p>
-          </div>
+    return null;
+  };
 
-          {workouts.length === 0 && Object.keys(nutritionLog).length === 0 && (
+  // ═══ CONFIG / AJUSTES ═══
+  const renderConfig = () => (
+    <div style={{ padding: "0 20px 100px" }}>
+      <div style={{ paddingTop: 16, marginBottom: 28 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, margin: 0, fontFamily: font, letterSpacing: "-0.5px" }}>⚙️ Ajustes</h1>
+      </div>
+
+      {/* Objetivos nutricionales */}
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: font }}>Objetivos nutricionales</div>
+      <div style={{ ...baseCard, padding: 16, marginBottom: 8 }}>
+        {[
+          { label: "Calorías basales por defecto", val: nutSettings.basalCal, key: "basalCal" },
+          { label: "Objetivo de proteínas (g)", val: nutSettings.protTarget, key: "protTarget" },
+        ].map((f) => (
+          <div key={f.key} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6 }}>{f.label}</div>
+            <input type="number" value={f.val} onChange={(e) => setNutSettings((prev) => ({ ...prev, [f.key]: Number(e.target.value) || 0 }))}
+              style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.bg, color: C.text, fontSize: 18, fontWeight: 700, outline: "none", fontFamily: font, boxSizing: "border-box", textAlign: "center" }} />
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 4, marginBottom: 28 }}>El basal se aplica como valor por defecto a días nuevos. Puedes editarlo por día.</p>
+
+      {/* Backup / Restaurar */}
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: font }}>Backup / Restaurar</div>
+      <button onClick={backupAllData} style={{
+        width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.accent}40`,
+        background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 10,
+      }}>Descargar backup completo</button>
+      <label style={{
+        display: "block", width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
+        background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "center",
+        boxSizing: "border-box",
+      }}>
+        Restaurar desde archivo
+        <input type="file" accept=".json" onChange={(e) => { if (e.target.files[0]) restoreFromBackup(e.target.files[0]); e.target.value = ""; }}
+          style={{ display: "none" }} />
+      </label>
+      <p style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 8, marginBottom: 28 }}>
+        El backup incluye entrenamientos, nutrición, peso, ejercicios y alimentos personalizados.
+      </p>
+
+      {/* Datos de prueba */}
+      {workouts.length === 0 && Object.keys(nutritionLog).length === 0 && (
+        <>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: font }}>Datos de prueba</div>
           <button onClick={() => {
             const nutLog = {};
             const wLog = [];
@@ -2488,7 +2484,6 @@ function WorkoutTracker() {
             }
             setNutritionLog(nutLog);
             setWeightLog(wLog);
-            // Also generate some workout history
             const wkTemplates = [
               [{ id: "bench_press", sets: [{w:80,r:10},{w:85,r:8},{w:85,r:8}] }, { id: "incline_db_press", sets: [{w:30,r:10},{w:32,r:8},{w:32,r:8}] }, { id: "chest_fly", sets: [{w:15,r:12},{w:15,r:12}] }, { id: "tricep_pushdown", sets: [{w:30,r:12},{w:35,r:10},{w:35,r:10}] }],
               [{ id: "lat_pulldown", sets: [{w:60,r:10},{w:65,r:8},{w:65,r:8}] }, { id: "barbell_row", sets: [{w:60,r:10},{w:65,r:8},{w:65,r:8}] }, { id: "seated_cable_row", sets: [{w:50,r:12},{w:55,r:10}] }, { id: "barbell_curl", sets: [{w:25,r:10},{w:25,r:10},{w:25,r:8}] }],
@@ -2509,23 +2504,20 @@ function WorkoutTracker() {
               });
             }
             setWorkouts(wks);
-            setNutView("summary");
           }} style={{
             width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.danger}40`,
-            background: `${C.danger}15`, color: C.danger, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 24,
+            background: `${C.danger}15`, color: C.danger, fontSize: 13, fontWeight: 600, cursor: "pointer",
           }}>🧪 Cargar datos de prueba (60 días)</button>
-          )}
-        </div>
-      );
-    }
-
-    return null;
-  };
+        </>
+      )}
+    </div>
+  );
 
   // ═══ TAB BAR & LAYOUT ═══
   const tabs = [
     { id: "home", icon: "🏋️", label: "Entreno" },
     { id: "nutrition", icon: "🍽️", label: "Nutrición" },
+    { id: "config", icon: "⚙️", label: "Ajustes" },
   ];
 
   if (!loaded) return (
@@ -2549,6 +2541,7 @@ function WorkoutTracker() {
       {view === "circuit-setup" && renderCircuitSetup()}
       {view === "plans" && renderPlans()}
       {view === "plan-edit" && renderPlanEdit()}
+      {view === "config" && renderConfig()}
       {showTabBar && (
         <div style={{
           position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
@@ -2559,7 +2552,7 @@ function WorkoutTracker() {
           {tabs.map((tab) => (
             <button key={tab.id} onClick={() => { setEditingWorkout(null); if (tab.id === "nutrition") setNutView("summary"); setView(tab.id); }} style={{
               background: "none", border: "none", fontSize: 11, cursor: "pointer",
-              color: [tab.id, ...(tab.id === "home" ? ["history", "exercises", "detail", "progress"] : [])].includes(view) ? C.accent : C.textDim,
+              color: [tab.id, ...(tab.id === "home" ? ["history", "exercises", "detail", "progress", "plans"] : [])].includes(view) ? C.accent : C.textDim,
               display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "4px 16px",
             }}>
               <span style={{ fontSize: 22 }}>{tab.icon}</span>
