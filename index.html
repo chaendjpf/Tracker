@@ -1533,36 +1533,6 @@ function WorkoutTracker() {
           {filteredWorkouts.length} sesión{filteredWorkouts.length !== 1 ? "es" : ""}
         </p>
       )}
-      {exportData && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.85)", zIndex: 1000,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          padding: 20,
-        }}>
-          <div style={{ width: "100%", maxWidth: 440 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: font }}>{exportType}</span>
-              <button onClick={() => setExportData(null)} style={{
-                background: "none", border: "none", color: C.textDim, fontSize: 24, cursor: "pointer",
-              }}>✕</button>
-            </div>
-            <textarea id="export-textarea" readOnly value={exportData}
-              onFocus={(e) => { e.target.select(); e.target.setSelectionRange(0, 99999); }}
-              style={{
-                width: "100%", height: 300, padding: 14, borderRadius: 12,
-                border: `1px solid ${C.border}`, background: C.card,
-                color: C.text, fontSize: 12, fontFamily: "monospace",
-                resize: "none", boxSizing: "border-box", outline: "none",
-              }} />
-            <button onClick={selectAllExport} style={{
-              width: "100%", padding: "14px", borderRadius: 12, border: "none",
-              background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10,
-            }}>Seleccionar todo</button>
-            <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 8 }}>Selecciona → Copia → Pega donde quieras</p>
-          </div>
-        </div>
-      )}
       {filteredWorkouts.length === 0 ? (
         <div style={{ ...baseCard, textAlign: "center", padding: "40px 20px", color: C.textDim }}>
           <p>{workouts.length === 0 ? "Sin sesiones todavía" : "Sin sesiones en este periodo"}</p>
@@ -1716,10 +1686,30 @@ function WorkoutTracker() {
         }}>Eliminar sesión</button>
 
         {!isEditing && (
-          <button onClick={() => { saveWorkoutAsPlan(w); alert("Plan guardado"); }} style={{
-            width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
-            background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 8,
-          }}>📋 Guardar como plan</button>
+          <>
+            <button onClick={() => { saveWorkoutAsPlan(w); alert("Plan guardado"); }} style={{
+              width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
+              background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 8,
+            }}>📋 Guardar como plan</button>
+            <button onClick={() => {
+              const lines = [`Entrenamiento · ${formatFullDate(w.date)}`];
+              if (w.circuit) lines.push(`Circuito: ${w.circuit.rounds}R · ${w.circuit.workTime}s/${w.circuit.restTime}s`);
+              else lines.push(`${totalSets(w)} series${vol > 0 ? ` · ${(vol / 1000).toFixed(1)}k kg` : ""}`);
+              lines.push("");
+              w.exercises.forEach((ex) => {
+                const info = getExerciseInfo(ex.exerciseId);
+                const t = info?.type || "s";
+                lines.push(`${info?.emoji || ""} ${info?.name || ex.exerciseId}`);
+                ex.sets.forEach((s, j) => lines.push(`  #${j + 1} ${formatSetShort(s, t)}`));
+                lines.push("");
+              });
+              setExportData(lines.join("\n").trim());
+              setExportType("Entrenamiento");
+            }} style={{
+              width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
+              background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 8,
+            }}>📤 Compartir</button>
+          </>
         )}
       </div>
     );
@@ -2183,9 +2173,27 @@ function WorkoutTracker() {
           })}
 
           {/* Bottom buttons */}
-          <button onClick={() => { setNutNewWeight(latestWeight ? String(latestWeight.weight) : ""); setNutView("weightLog"); }} style={{
-            width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 16,
-          }}>⚖️ Peso</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button onClick={() => { setNutNewWeight(latestWeight ? String(latestWeight.weight) : ""); setNutView("weightLog"); }} style={{
+              flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>⚖️ Peso</button>
+            <button onClick={() => {
+              const log = getDayLog(nutDate);
+              const dateLabel = new Date(nutDate + "T12:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+              const lines = [`Nutrición · ${dateLabel}`];
+              lines.push(`${dayTotals.cal} kcal · ${parseFloat(dayTotals.prot.toFixed(1))}g prot`);
+              lines.push(`Basal: ${dayTotals.basalCal} | Actividad: ${dayTotals.activityCal} | Balance: ${dayTotals.balance >= 0 ? "+" : ""}${dayTotals.balance}`);
+              lines.push("");
+              log.meals.forEach((m) => {
+                lines.push(`· ${m.name}${m.grams ? ` (${m.grams}g)` : ""} — ${m.cal} kcal, ${parseFloat(Number(m.prot).toFixed(1))}g prot`);
+              });
+              if (log.meals.length === 0) lines.push("(sin comidas registradas)");
+              setExportData(lines.join("\n").trim());
+              setExportType(`Nutrición ${nutDate}`);
+            }} style={{
+              flex: 1, padding: "12px", borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.textDim, fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>📤 Compartir día</button>
+          </div>
 
           {/* Export con filtros */}
           <div style={{ marginTop: 20 }}>
@@ -2212,27 +2220,6 @@ function WorkoutTracker() {
             </div>
           </div>
 
-          {/* Export modal */}
-          {exportData && (
-            <div style={{
-              position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-              background: "rgba(0,0,0,0.85)", zIndex: 1000,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              padding: 20,
-            }}>
-              <div style={{ width: "100%", maxWidth: 440 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: font }}>{exportType}</span>
-                  <button onClick={() => setExportData(null)} style={{ background: "none", border: "none", color: C.textDim, fontSize: 24, cursor: "pointer" }}>✕</button>
-                </div>
-                <textarea id="export-textarea" readOnly value={exportData}
-                  onFocus={(e) => { e.target.select(); e.target.setSelectionRange(0, 99999); }}
-                  style={{ width: "100%", height: 300, padding: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 12, fontFamily: "monospace", resize: "none", boxSizing: "border-box", outline: "none" }} />
-                <button onClick={selectAllExport} style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10 }}>Seleccionar todo</button>
-                <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 8 }}>Selecciona → Copia → Pega donde quieras</p>
-              </div>
-            </div>
-          )}
         </div>
       );
     }
@@ -2592,6 +2579,26 @@ function WorkoutTracker() {
       {view === "plans" && renderPlans()}
       {view === "plan-edit" && renderPlanEdit()}
       {view === "config" && renderConfig()}
+      {exportData && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.85)", zIndex: 1000,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          padding: 20,
+        }}>
+          <div style={{ width: "100%", maxWidth: 440 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: font }}>{exportType}</span>
+              <button onClick={() => setExportData(null)} style={{ background: "none", border: "none", color: C.textDim, fontSize: 24, cursor: "pointer" }}>✕</button>
+            </div>
+            <textarea id="export-textarea" readOnly value={exportData}
+              onFocus={(e) => { e.target.select(); e.target.setSelectionRange(0, 99999); }}
+              style={{ width: "100%", height: 300, padding: 14, borderRadius: 12, border: `1px solid ${C.border}`, background: C.card, color: C.text, fontSize: 12, fontFamily: "monospace", resize: "none", boxSizing: "border-box", outline: "none" }} />
+            <button onClick={selectAllExport} style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: C.accent, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginTop: 10 }}>Seleccionar todo</button>
+            <p style={{ fontSize: 12, color: C.textDim, textAlign: "center", marginTop: 8 }}>Selecciona → Copia → Pega donde quieras</p>
+          </div>
+        </div>
+      )}
       {showTabBar && (
         <div style={{
           position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
