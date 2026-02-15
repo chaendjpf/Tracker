@@ -185,6 +185,8 @@ const STORAGE_KEY = "gym-tracker-data";
 const NUTRITION_KEY = "gym-tracker-nutrition";
 const WEIGHT_KEY = "gym-tracker-weight";
 const NUTRITION_SETTINGS_KEY = "gym-tracker-nutrition-settings";
+const ACTIVE_WORKOUT_KEY = "gym-tracker-active-workout";
+const PLANS_KEY = "gym-tracker-plans";
 
 // ── FOOD DATABASE (per 100g) ──
 const FOOD_DB = [
@@ -338,6 +340,10 @@ function WorkoutTracker() {
   const [nutChartFilter, setNutChartFilter] = useState("1m");
   const [nutShowChart, setNutShowChart] = useState(false);
 
+  // ── Plans state ──
+  const [plans, setPlans] = useState([]);
+  const [editingPlan, setEditingPlan] = useState(null);
+
   const EXERCISES = useMemo(() => {
     const merged = {};
     for (const [group, exs] of Object.entries(DEFAULT_EXERCISES)) merged[group] = [...exs];
@@ -366,6 +372,8 @@ function WorkoutTracker() {
       try { const r = localStorage.getItem(NUTRITION_KEY); if (r) setNutritionLog(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(WEIGHT_KEY); if (r) setWeightLog(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(NUTRITION_SETTINGS_KEY); if (r) setNutSettings(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(PLANS_KEY); if (r) setPlans(JSON.parse(r)); } catch {}
+      try { const r = localStorage.getItem(ACTIVE_WORKOUT_KEY); if (r) { const saved = JSON.parse(r); setActiveWorkout(saved.workout); setView(saved.view); } } catch {}
       setLoaded(true);
     })();
   }, []);
@@ -376,6 +384,8 @@ function WorkoutTracker() {
   useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_KEY, JSON.stringify(nutritionLog)); } catch {} } }, [nutritionLog, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(WEIGHT_KEY, JSON.stringify(weightLog)); } catch {} } }, [weightLog, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(NUTRITION_SETTINGS_KEY, JSON.stringify(nutSettings)); } catch {} } }, [nutSettings, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(PLANS_KEY, JSON.stringify(plans)); } catch {} } }, [plans, loaded]);
+  useEffect(() => { if (!loaded) return; try { if (activeWorkout) { localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ workout: activeWorkout, view })); } else { localStorage.removeItem(ACTIVE_WORKOUT_KEY); } } catch {} }, [activeWorkout, view, loaded]);
 
   const backupAllData = () => {
     const data = {
@@ -443,6 +453,7 @@ function WorkoutTracker() {
   const getWState = () => editingWorkout ? [editingWorkout, setEditingWorkout] : [activeWorkout, setActiveWorkout];
 
   const addExerciseToWorkout = (exercise) => {
+    if (editingPlan) { addExerciseToPlan(exercise); return; }
     const info = getExerciseInfo(exercise.id) || exercise;
     const [, setter] = getWState();
     setter((w) => ({
@@ -532,6 +543,81 @@ function WorkoutTracker() {
   };
 
   const deleteWorkout = (id) => { setWorkouts((prev) => prev.filter((w) => w.id !== id)); setSelectedWorkout(null); setEditingWorkout(null); setView("history"); };
+
+  // ── Plan management ──
+  const createNewPlan = () => {
+    setEditingPlan({ id: Date.now().toString(), name: "", createdAt: new Date().toISOString(), exercises: [] });
+    setView("plan-edit");
+  };
+
+  const editPlan = (plan) => {
+    setEditingPlan(JSON.parse(JSON.stringify(plan)));
+    setView("plan-edit");
+  };
+
+  const savePlan = () => {
+    if (!editingPlan) return;
+    const plan = { ...editingPlan, name: editingPlan.name.trim() || "Plan sin nombre" };
+    setPlans((prev) => {
+      const idx = prev.findIndex((p) => p.id === plan.id);
+      return idx >= 0 ? prev.map((p) => p.id === plan.id ? plan : p) : [...prev, plan];
+    });
+    setEditingPlan(null);
+    setView("plans");
+  };
+
+  const deletePlan = (id) => {
+    setPlans((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const addExerciseToPlan = (exercise) => {
+    setEditingPlan((p) => ({
+      ...p,
+      exercises: [...p.exercises, { exerciseId: exercise.id, numSets: 3 }],
+    }));
+    setView("plan-edit");
+    setExerciseFilter(null);
+    setSearchQuery("");
+  };
+
+  const removeExerciseFromPlan = (idx) => {
+    setEditingPlan((p) => ({ ...p, exercises: p.exercises.filter((_, i) => i !== idx) }));
+  };
+
+  const updatePlanSets = (idx, delta) => {
+    setEditingPlan((p) => {
+      const exercises = [...p.exercises];
+      exercises[idx] = { ...exercises[idx], numSets: Math.max(1, exercises[idx].numSets + delta) };
+      return { ...p, exercises };
+    });
+  };
+
+  const loadPlanAsWorkout = (plan) => {
+    if (activeWorkout && activeWorkout.exercises.length > 0) {
+      if (!confirm("Tienes un entrenamiento en curso. ¿Descartarlo y cargar el plan?")) return;
+    }
+    const exercises = plan.exercises
+      .filter((ex) => getExerciseInfo(ex.exerciseId))
+      .map((ex) => {
+        const info = getExerciseInfo(ex.exerciseId);
+        return {
+          exerciseId: ex.exerciseId,
+          sets: Array.from({ length: ex.numSets }, () => ({ ...emptySet(info.type || "s"), done: false })),
+        };
+      });
+    setActiveWorkout({ exercises, date: new Date().toISOString() });
+    setView("workout");
+  };
+
+  const saveWorkoutAsPlan = (workout) => {
+    const plan = {
+      id: Date.now().toString(),
+      name: workout.exercises.map((e) => getExerciseInfo(e.exerciseId)?.group).filter((v, i, a) => a.indexOf(v) === i).join(" + ") || "Plan sin nombre",
+      createdAt: new Date().toISOString(),
+      exercises: workout.exercises.map((ex) => ({ exerciseId: ex.exerciseId, numSets: ex.sets.length })),
+    };
+    setPlans((prev) => [...prev, plan]);
+  };
 
   const addCustomExercise = () => {
     if (!newExName.trim()) return;
@@ -922,6 +1008,13 @@ function WorkoutTracker() {
         fontSize: 17, fontWeight: 700, cursor: "pointer", marginBottom: 10,
         fontFamily: font, boxShadow: `0 4px 24px ${C.accentGlow}`,
       }}>+ Empezar Entrenamiento</button>
+
+      <button onClick={() => setView("plans")} style={{
+        width: "100%", padding: "16px", borderRadius: 14, border: `1px solid ${C.border}`,
+        background: C.card, color: C.text, fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 10,
+        fontFamily: font, display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+      }}>📋 Mis Planes{plans.length > 0 && ` (${plans.length})`}</button>
+
       <button onClick={startCircuitSetup} style={{
         width: "100%", padding: "16px", borderRadius: 16, border: "none",
         background: "linear-gradient(135deg, #a855f7, #c084fc)", color: "#fff",
@@ -1013,7 +1106,7 @@ function WorkoutTracker() {
     return (
       <div style={{ padding: "0 20px 100px" }}>
         <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={() => { setView(editingWorkout ? "detail" : circuitConfig ? "circuit-setup" : "workout"); setExerciseFilter(null); setSearchQuery(""); }}
+          <button onClick={() => { setView(editingPlan ? "plan-edit" : editingWorkout ? "detail" : circuitConfig ? "circuit-setup" : "workout"); setExerciseFilter(null); setSearchQuery(""); }}
             style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Añadir Ejercicio</h1>
         </div>
@@ -1134,6 +1227,143 @@ function WorkoutTracker() {
         ) : (
           <div style={{ color: C.textDim, textAlign: "center", padding: 40, fontSize: 14 }}>No se encontraron ejercicios</div>
         )}
+      </div>
+    );
+  };
+
+  // ═══ PLANS ═══
+  const renderPlans = () => (
+    <div style={{ padding: "0 20px 100px" }}>
+      <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={() => setView("home")}
+          style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>Mis Planes</h1>
+      </div>
+
+      <button onClick={createNewPlan} style={{
+        width: "100%", padding: "16px", borderRadius: 14, border: `2px dashed ${C.accent}40`,
+        background: C.accentDim, color: C.accent, fontSize: 15, fontWeight: 600, cursor: "pointer", marginBottom: 20,
+      }}>+ Crear nuevo plan</button>
+
+      {plans.length === 0 ? (
+        <div style={{ ...baseCard, textAlign: "center", padding: "40px 20px", color: C.textDim }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+          <p style={{ margin: 0, fontSize: 15 }}>No hay planes guardados</p>
+          <p style={{ margin: "8px 0 0", fontSize: 13 }}>Crea un plan o guarda un entrenamiento como plan</p>
+        </div>
+      ) : plans.map((plan) => {
+        const validExercises = plan.exercises.filter((ex) => getExerciseInfo(ex.exerciseId));
+        const groups = [...new Set(validExercises.map((ex) => getExerciseInfo(ex.exerciseId)?.group).filter(Boolean))];
+        const totalS = validExercises.reduce((t, ex) => t + ex.numSets, 0);
+        return (
+          <div key={plan.id} style={{ ...baseCard, marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>{plan.name}</div>
+                <div style={{ fontSize: 13, color: C.textDim }}>
+                  {validExercises.length} ejercicios · {totalS} series
+                  {groups.length > 0 && <span> · {groups.join(", ")}</span>}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+              {validExercises.map((ex, i) => {
+                const info = getExerciseInfo(ex.exerciseId);
+                return (
+                  <span key={i} style={{
+                    padding: "4px 10px", borderRadius: 8, background: "rgba(255,255,255,0.05)",
+                    fontSize: 12, color: C.textDim,
+                  }}>{info.emoji} {info.name} ×{ex.numSets}</span>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => loadPlanAsWorkout(plan)} style={{
+                flex: 1, padding: "12px", borderRadius: 12, border: "none",
+                background: `linear-gradient(135deg, ${C.accent}, #ff8f35)`, color: "#fff",
+                fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: font,
+              }}>▶ Empezar</button>
+              <button onClick={() => editPlan(plan)} style={{
+                padding: "12px 16px", borderRadius: 12, border: `1px solid ${C.border}`,
+                background: "transparent", color: C.textDim, fontSize: 14, cursor: "pointer",
+              }}>✏️</button>
+              <button onClick={() => deletePlan(plan.id)} style={{
+                padding: "12px 16px", borderRadius: 12, border: `1px solid ${C.danger}40`,
+                background: C.dangerDim, color: C.danger, fontSize: 14, cursor: "pointer",
+              }}>🗑</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderPlanEdit = () => {
+    if (!editingPlan) return null;
+    return (
+      <div style={{ padding: "0 20px 100px" }}>
+        <div style={{ paddingTop: 16, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => { setEditingPlan(null); setView("plans"); }}
+            style={{ background: "none", border: "none", color: C.accent, fontSize: 28, cursor: "pointer", padding: 0 }}>‹</button>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, fontFamily: font }}>
+            {plans.some((p) => p.id === editingPlan.id) ? "Editar Plan" : "Nuevo Plan"}
+          </h1>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Nombre</div>
+          <input type="text" placeholder="Ej: Push Day, Torso, Pierna..." value={editingPlan.name}
+            onChange={(e) => setEditingPlan((p) => ({ ...p, name: e.target.value }))}
+            style={{
+              width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${C.border}`,
+              background: C.card, color: C.text, fontSize: 15, outline: "none",
+              boxSizing: "border-box", fontFamily: fontBody,
+            }} />
+        </div>
+
+        <div style={{ fontSize: 12, color: C.textDim, marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>
+          Ejercicios ({editingPlan.exercises.length})
+        </div>
+
+        {editingPlan.exercises.map((ex, idx) => {
+          const info = getExerciseInfo(ex.exerciseId);
+          if (!info) return null;
+          return (
+            <div key={idx} style={{ ...baseCard, marginBottom: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>{info.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{info.name}</div>
+                <div style={{ fontSize: 12, color: C.textDim }}>{info.group} · {TYPE_TAGS[info.type || "s"]}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => updatePlanSets(idx, -1)} style={{
+                  width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", color: C.text, fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>−</button>
+                <span style={{ fontSize: 16, fontWeight: 700, color: C.accent, minWidth: 24, textAlign: "center" }}>{ex.numSets}</span>
+                <button onClick={() => updatePlanSets(idx, 1)} style={{
+                  width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
+                  background: "transparent", color: C.text, fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>+</button>
+              </div>
+              <button onClick={() => removeExerciseFromPlan(idx)} style={{
+                background: "none", border: "none", color: C.danger, fontSize: 16, cursor: "pointer", padding: "4px 8px",
+              }}>✕</button>
+            </div>
+          );
+        })}
+
+        <button onClick={() => setView("picker")} style={{
+          width: "100%", padding: "14px", borderRadius: 14, border: `2px dashed ${C.accent}40`,
+          background: C.accentDim, color: C.accent, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 4, marginBottom: 20,
+        }}>+ Añadir Ejercicio</button>
+
+        <button onClick={savePlan} style={{
+          width: "100%", padding: "16px", borderRadius: 14, border: "none",
+          background: `linear-gradient(135deg, ${C.accent}, #ff8f35)`, color: "#fff",
+          fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: font,
+          boxShadow: `0 4px 24px ${C.accentGlow}`, marginBottom: 10,
+        }}>Guardar Plan</button>
       </div>
     );
   };
@@ -1473,8 +1703,15 @@ function WorkoutTracker() {
 
         <button onClick={() => deleteWorkout(w.id)} style={{
           width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.danger}40`,
-          background: C.dangerDim, color: C.danger, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: isEditing ? 0 : 12,
+          background: C.dangerDim, color: C.danger, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: isEditing ? 0 : 4,
         }}>Eliminar sesión</button>
+
+        {!isEditing && (
+          <button onClick={() => { saveWorkoutAsPlan(w); alert("Plan guardado"); }} style={{
+            width: "100%", padding: "14px", borderRadius: 12, border: `1px solid ${C.border}`,
+            background: C.card, color: C.textDim, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 8,
+          }}>📋 Guardar como plan</button>
+        )}
       </div>
     );
   };
@@ -2297,7 +2534,7 @@ function WorkoutTracker() {
     </div>
   );
 
-  const showTabBar = !["workout", "picker", "circuit-setup"].includes(view) && !editingWorkout;
+  const showTabBar = !["workout", "picker", "circuit-setup", "plan-edit"].includes(view) && !editingWorkout;
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", fontFamily: fontBody, color: C.text, position: "relative" }}>
@@ -2310,6 +2547,8 @@ function WorkoutTracker() {
       {view === "progress" && renderProgress()}
       {view === "exercises" && renderExercises()}
       {view === "circuit-setup" && renderCircuitSetup()}
+      {view === "plans" && renderPlans()}
+      {view === "plan-edit" && renderPlanEdit()}
       {showTabBar && (
         <div style={{
           position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
