@@ -2706,27 +2706,44 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
     }
   };
 
-  const extractPlans = (text) => {
-    const plans = [];
-    const regex = /```plan\s*\n?([\s\S]*?)```/g;
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      try {
-        const parsed = JSON.parse(match[1].trim());
-        if (parsed.name && parsed.exercises) plans.push(parsed);
-      } catch {}
+  const resolveExerciseId = (ex) => {
+    // Try direct ID
+    if (ex.id && getExerciseInfo(ex.id)) return ex.id;
+    if (ex.exerciseId && getExerciseInfo(ex.exerciseId)) return ex.exerciseId;
+    // Try by name
+    const name = ex.name || ex.nombre || "";
+    if (name) {
+      const found = ALL_EXERCISES.find(e => e.name.toLowerCase() === name.toLowerCase());
+      if (found) return found.id;
+      // Fuzzy: contains
+      const fuzzy = ALL_EXERCISES.find(e => e.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(e.name.toLowerCase()));
+      if (fuzzy) return fuzzy.id;
     }
-    return plans;
+    return null;
+  };
+
+  const normalizePlan = (parsed) => {
+    if (!parsed || typeof parsed !== "object") return null;
+    const name = parsed.name || parsed.nombre || "Plan del Coach";
+    const rawExercises = Array.isArray(parsed.exercises) ? parsed.exercises
+      : Array.isArray(parsed.ejercicios) ? parsed.ejercicios : null;
+    if (!rawExercises) return null;
+    const exercises = rawExercises.map(ex => ({
+      id: resolveExerciseId(ex),
+      sets: ex.sets || ex.series || 3,
+      reps: String(ex.reps || ex.repeticiones || ""),
+      weight: String(ex.weight || ex.peso || ""),
+      rawName: ex.name || ex.nombre || ex.id || "?",
+    })).filter(ex => ex.id);
+    if (exercises.length === 0) return null;
+    return { name, exercises, _totalRaw: rawExercises.length };
   };
 
   const savePlanFromCoach = (planData) => {
-    const exercises = planData.exercises
-      .map(ex => {
-        const info = getExerciseInfo(ex.id);
-        if (!info) return null;
-        return { exerciseId: ex.id, numSets: ex.sets || 3, reps: String(ex.reps || ""), weight: String(ex.weight || "") };
-      })
-      .filter(Boolean);
+    const exercises = planData.exercises.map(ex => ({
+      exerciseId: ex.id, numSets: ex.sets || 3,
+      reps: String(ex.reps || ""), weight: String(ex.weight || ""),
+    }));
     if (exercises.length === 0) return;
     const plan = {
       id: Date.now().toString(),
@@ -2741,7 +2758,8 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
   const [savedPlanIds, setSavedPlanIds] = useState(new Set());
 
   const renderPlanCard = (planData, key) => {
-    const validExercises = planData.exercises.filter(ex => getExerciseInfo(ex.id));
+    if (!planData || !Array.isArray(planData.exercises)) return null;
+    const validExercises = planData.exercises;
     const isSaved = savedPlanIds.has(key);
     return (
       <div key={key} style={{
@@ -2759,9 +2777,9 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
               </div>
             );
           })}
-          {planData.exercises.length > validExercises.length && (
+          {planData._totalRaw > validExercises.length && (
             <div style={{ fontSize: 11, color: C.danger }}>
-              ⚠️ {planData.exercises.length - validExercises.length} ejercicio(s) no reconocido(s)
+              ⚠️ {planData._totalRaw - validExercises.length} ejercicio(s) no reconocido(s)
             </div>
           )}
         </div>
@@ -2794,7 +2812,8 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
       if (match.index > lastIndex) segments.push({ type: "text", content: text.slice(lastIndex, match.index) });
       try {
         const parsed = JSON.parse(match[1].trim());
-        if (parsed.name && parsed.exercises) segments.push({ type: "plan", data: parsed, idx: planCounter++ });
+        const normalized = normalizePlan(parsed);
+        if (normalized) segments.push({ type: "plan", data: normalized, idx: planCounter++ });
       } catch {}
       lastIndex = match.index + match[0].length;
     }
