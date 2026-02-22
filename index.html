@@ -2527,9 +2527,9 @@ function WorkoutTracker() {
     const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 28);
     const week5ago = new Date(now); week5ago.setDate(week5ago.getDate() - 56);
 
-    // Exercise catalog
+    // Exercise catalog with IDs
     const catalog = Object.entries(EXERCISES).map(([g, exs]) =>
-      `${g}: ${exs.map(e => e.name).join(", ")}`
+      `${g}: ${exs.map(e => `${e.name} [${e.id}]`).join(", ")}`
     ).join("\n");
 
     // Last 4 weeks workouts (detailed)
@@ -2639,7 +2639,19 @@ INSTRUCCIONES:
 - Adapta las recomendaciones al nivel y progresión real del usuario
 - Si preguntan por nutrición, basa tu respuesta en los datos reales
 - Responde de forma concisa pero completa
-- Usa formato con negritas (**texto**) y listas cuando sea útil`;
+- Usa formato con negritas (**texto**) y listas cuando sea útil
+
+PLANES DE ENTRENAMIENTO:
+Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPRE incluye al final de tu respuesta un bloque JSON con este formato EXACTO:
+\`\`\`plan
+{"name":"Nombre del plan","exercises":[{"id":"exercise_id","sets":3,"reps":"10","weight":"80"}]}
+\`\`\`
+- Usa los IDs del catálogo (entre corchetes [id])
+- "weight" es string en kg, déjalo "" para ejercicios bodyweight
+- "reps" es string
+- Puedes generar VARIOS bloques \`\`\`plan si el usuario pide varios días/planes
+- Explica el plan en texto normal ANTES del bloque JSON
+- Si el usuario pide un plan semanal con varios días, genera un bloque \`\`\`plan por cada día`;
   };
 
   const sendToGemini = async (userMessage) => {
@@ -2694,50 +2706,141 @@ INSTRUCCIONES:
     }
   };
 
-  const renderMarkdown = (text) => {
-    const lines = text.split("\n");
-    const elements = [];
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      // Headers
-      if (line.startsWith("### ")) {
-        elements.push(<div key={i} style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 10, marginBottom: 4 }}>{line.slice(4)}</div>);
-      } else if (line.startsWith("## ")) {
-        elements.push(<div key={i} style={{ fontSize: 15, fontWeight: 700, color: C.text, marginTop: 10, marginBottom: 4 }}>{line.slice(3)}</div>);
-      } else if (/^\d+\.\s/.test(line)) {
-        // Numbered list
-        const items = [];
-        while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
-          items.push(lines[i].replace(/^\d+\.\s/, ""));
-          i++;
-        }
-        elements.push(
-          <ol key={`ol-${i}`} style={{ margin: "4px 0", paddingLeft: 20, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-            {items.map((item, j) => <li key={j}>{renderInline(item)}</li>)}
-          </ol>
-        );
-        continue;
-      } else if (line.startsWith("- ") || line.startsWith("* ")) {
-        // Bullet list
-        const items = [];
-        while (i < lines.length && (lines[i].startsWith("- ") || lines[i].startsWith("* "))) {
-          items.push(lines[i].slice(2));
-          i++;
-        }
-        elements.push(
-          <ul key={`ul-${i}`} style={{ margin: "4px 0", paddingLeft: 20, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-            {items.map((item, j) => <li key={j}>{renderInline(item)}</li>)}
-          </ul>
-        );
-        continue;
-      } else if (line.trim() === "") {
-        elements.push(<div key={i} style={{ height: 6 }} />);
-      } else {
-        elements.push(<div key={i} style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 2 }}>{renderInline(line)}</div>);
-      }
-      i++;
+  const extractPlans = (text) => {
+    const plans = [];
+    const regex = /```plan\s*\n?([\s\S]*?)```/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        if (parsed.name && parsed.exercises) plans.push(parsed);
+      } catch {}
     }
+    return plans;
+  };
+
+  const savePlanFromCoach = (planData) => {
+    const exercises = planData.exercises
+      .map(ex => {
+        const info = getExerciseInfo(ex.id);
+        if (!info) return null;
+        return { exerciseId: ex.id, numSets: ex.sets || 3, reps: String(ex.reps || ""), weight: String(ex.weight || "") };
+      })
+      .filter(Boolean);
+    if (exercises.length === 0) return;
+    const plan = {
+      id: Date.now().toString(),
+      name: planData.name,
+      createdAt: new Date().toISOString(),
+      exercises,
+    };
+    setPlans(prev => [...prev, plan]);
+    return plan;
+  };
+
+  const [savedPlanIds, setSavedPlanIds] = useState(new Set());
+
+  const renderPlanCard = (planData, key) => {
+    const validExercises = planData.exercises.filter(ex => getExerciseInfo(ex.id));
+    const isSaved = savedPlanIds.has(key);
+    return (
+      <div key={key} style={{
+        margin: "10px 0", padding: 14, borderRadius: 14,
+        background: "rgba(255,107,53,0.08)", border: `1px solid ${C.accent}30`,
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.accent, marginBottom: 10 }}>📋 {planData.name}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+          {validExercises.map((ex, j) => {
+            const info = getExerciseInfo(ex.id);
+            return (
+              <div key={j} style={{ fontSize: 12, color: C.text, display: "flex", justifyContent: "space-between" }}>
+                <span>{info.emoji} {info.name}</span>
+                <span style={{ color: C.textDim }}>{ex.sets}×{ex.reps}{ex.weight ? ` @ ${ex.weight}kg` : ""}</span>
+              </div>
+            );
+          })}
+          {planData.exercises.length > validExercises.length && (
+            <div style={{ fontSize: 11, color: C.danger }}>
+              ⚠️ {planData.exercises.length - validExercises.length} ejercicio(s) no reconocido(s)
+            </div>
+          )}
+        </div>
+        <button
+          disabled={isSaved || validExercises.length === 0}
+          onClick={() => {
+            const saved = savePlanFromCoach(planData);
+            if (saved) setSavedPlanIds(prev => new Set([...prev, key]));
+          }}
+          style={{
+            width: "100%", padding: "10px", borderRadius: 10, border: "none",
+            background: isSaved ? C.success : `linear-gradient(135deg, ${C.accent}, #ff8f35)`,
+            color: "#fff", fontSize: 13, fontWeight: 700, cursor: isSaved ? "default" : "pointer",
+          }}
+        >
+          {isSaved ? "✓ Guardado en Mis Planes" : "💾 Guardar en Mis Planes"}
+        </button>
+      </div>
+    );
+  };
+
+  const renderMarkdown = (text) => {
+    // Split text into segments: regular text and plan blocks
+    const segments = [];
+    let lastIndex = 0;
+    const planRegex = /```plan\s*\n?([\s\S]*?)```/g;
+    let match;
+    let planCounter = 0;
+    while ((match = planRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) segments.push({ type: "text", content: text.slice(lastIndex, match.index) });
+      try {
+        const parsed = JSON.parse(match[1].trim());
+        if (parsed.name && parsed.exercises) segments.push({ type: "plan", data: parsed, idx: planCounter++ });
+      } catch {}
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) segments.push({ type: "text", content: text.slice(lastIndex) });
+
+    const elements = [];
+    segments.forEach((seg, si) => {
+      if (seg.type === "plan") {
+        elements.push(renderPlanCard(seg.data, `plan-${seg.idx}-${seg.data.name}`));
+        return;
+      }
+      const lines = seg.content.split("\n");
+      let i = 0;
+      while (i < lines.length) {
+        const line = lines[i];
+        const lineKey = `${si}-${i}`;
+        if (line.startsWith("### ")) {
+          elements.push(<div key={lineKey} style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 10, marginBottom: 4 }}>{line.slice(4)}</div>);
+        } else if (line.startsWith("## ")) {
+          elements.push(<div key={lineKey} style={{ fontSize: 15, fontWeight: 700, color: C.text, marginTop: 10, marginBottom: 4 }}>{line.slice(3)}</div>);
+        } else if (/^\d+\.\s/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\d+\.\s/.test(lines[i])) { items.push(lines[i].replace(/^\d+\.\s/, "")); i++; }
+          elements.push(
+            <ol key={`ol-${lineKey}`} style={{ margin: "4px 0", paddingLeft: 20, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+              {items.map((item, j) => <li key={j}>{renderInline(item)}</li>)}
+            </ol>
+          );
+          continue;
+        } else if (line.startsWith("- ") || line.startsWith("* ")) {
+          const items = [];
+          while (i < lines.length && (lines[i].startsWith("- ") || lines[i].startsWith("* "))) { items.push(lines[i].slice(2)); i++; }
+          elements.push(
+            <ul key={`ul-${lineKey}`} style={{ margin: "4px 0", paddingLeft: 20, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+              {items.map((item, j) => <li key={j}>{renderInline(item)}</li>)}
+            </ul>
+          );
+          continue;
+        } else if (line.trim() === "") {
+          elements.push(<div key={lineKey} style={{ height: 6 }} />);
+        } else {
+          elements.push(<div key={lineKey} style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 2 }}>{renderInline(line)}</div>);
+        }
+        i++;
+      }
+    });
     return elements;
   };
 
