@@ -2643,6 +2643,9 @@ ${olderSummary}
 PLANES GUARDADOS:
 ${plansSummary}
 
+BASE DE DATOS DE ALIMENTOS (nombre [id] → cal/100g, prot/100g):
+${ALL_FOODS.map(f => `${f.name} [${f.id}]: ${f.cal} kcal, ${f.prot}g prot`).join("\n")}
+
 NUTRICIÓN ÚLTIMOS 7 DÍAS:
 ${nutSummary}
 Objetivos: ${nutSettings.basalCal} kcal basales, ${nutSettings.protTarget}g proteína
@@ -2676,7 +2679,19 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
 - "sets" debe ser un número ENTERO (ej: 3, 4)
 - Puedes generar VARIOS bloques \`\`\`plan si el usuario pide varios días/planes
 - Explica el plan en texto normal ANTES del bloque JSON
-- Si el usuario pide un plan semanal con varios días, genera un bloque \`\`\`plan por cada día`;
+- Si el usuario pide un plan semanal con varios días, genera un bloque \`\`\`plan por cada día
+
+REGISTRO DE COMIDAS:
+Cuando el usuario te diga lo que ha comido (ej: "He comido 200g de pollo con arroz"), calcula las calorías y proteínas e incluye un bloque JSON con este formato:
+\`\`\`meal
+{"foods":[{"id":"pechuga_pollo","name":"Pechuga pollo","grams":200,"cal":214,"prot":47.4,"fromDB":true},{"name":"Arroz blanco","grams":150,"cal":195,"prot":4.5,"fromDB":false}]}
+\`\`\`
+- Si el alimento existe en la BASE DE DATOS, usa su id y "fromDB":true. Calcula cal y prot proporcionalmente a los gramos (valores de la BD son por 100g)
+- Si NO existe en la BD, pon "fromDB":false, sin "id", y estima cal y prot con tus conocimientos
+- "grams", "cal" y "prot" son NÚMEROS (no strings)
+- Muestra primero un resumen de lo que has calculado, luego el bloque JSON
+- NO generes bloque \`\`\`meal a menos que el usuario mencione algo que ha comido o va a comer`;
+
   };
 
   const sendToGemini = async (userMessage) => {
@@ -2783,6 +2798,80 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
   };
 
   const [savedPlanIds, setSavedPlanIds] = useState(new Set());
+  const [savedMealIds, setSavedMealIds] = useState(new Set());
+
+  const normalizeMeal = (parsed) => {
+    if (!parsed || typeof parsed !== "object") return null;
+    const rawFoods = Array.isArray(parsed.foods) ? parsed.foods
+      : Array.isArray(parsed.comidas) ? parsed.comidas : null;
+    if (!rawFoods || rawFoods.length === 0) return null;
+    const foods = rawFoods.map(f => ({
+      id: f.id || null,
+      name: f.name || f.nombre || "Alimento",
+      grams: Math.round(Number(f.grams || f.gramos) || 0),
+      cal: Math.round(Number(f.cal || f.calorias) || 0),
+      prot: Math.round((Number(f.prot || f.proteina) || 0) * 10) / 10,
+      fromDB: !!(f.fromDB && f.id && ALL_FOODS.find(x => x.id === f.id)),
+    }));
+    return { foods };
+  };
+
+  const saveMealFromCoach = (mealData) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const newMeals = mealData.foods.map(f => ({
+      id: Date.now() + Math.random() * 1e6,
+      name: f.name,
+      grams: f.fromDB ? f.grams : null,
+      cal: f.cal,
+      prot: f.prot,
+      fromDB: f.fromDB,
+    }));
+    setNutritionLog(prev => {
+      const day = prev[today] || { meals: [], basalCal: nutSettings.basalCal, activityCal: 0 };
+      return { ...prev, [today]: { ...day, meals: [...day.meals, ...newMeals] } };
+    });
+    return true;
+  };
+
+  const renderMealCard = (mealData, key) => {
+    if (!mealData || !Array.isArray(mealData.foods)) return null;
+    const isSaved = savedMealIds.has(key);
+    const totalCal = mealData.foods.reduce((s, f) => s + f.cal, 0);
+    const totalProt = mealData.foods.reduce((s, f) => s + f.prot, 0);
+    return (
+      <div key={key} style={{
+        margin: "10px 0", padding: 14, borderRadius: 14,
+        background: "rgba(52,211,153,0.08)", border: `1px solid ${C.success}30`,
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.success, marginBottom: 10 }}>🍽️ Registro de comida</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+          {mealData.foods.map((f, j) => (
+            <div key={j} style={{ fontSize: 12, color: C.text, display: "flex", justifyContent: "space-between" }}>
+              <span>{f.name} {f.grams ? `(${f.grams}g)` : ""}</span>
+              <span style={{ color: C.textDim }}>{f.cal} kcal · {f.prot}g prot</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12, borderTop: `1px solid ${C.border}`, paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
+          <span>Total</span>
+          <span>{totalCal} kcal · {Math.round(totalProt * 10) / 10}g prot</span>
+        </div>
+        <button
+          disabled={isSaved}
+          onClick={() => {
+            if (saveMealFromCoach(mealData)) setSavedMealIds(prev => new Set([...prev, key]));
+          }}
+          style={{
+            width: "100%", padding: "10px", borderRadius: 10, border: "none",
+            background: isSaved ? C.success : `linear-gradient(135deg, ${C.success}, #2dd4bf)`,
+            color: "#fff", fontSize: 13, fontWeight: 700, cursor: isSaved ? "default" : "pointer",
+          }}
+        >
+          {isSaved ? "✓ Añadido a Nutrición de hoy" : "🍽️ Añadir a Nutrición de hoy"}
+        </button>
+      </div>
+    );
+  };
 
   const renderPlanCard = (planData, key) => {
     if (!planData || !Array.isArray(planData.exercises)) return null;
@@ -2832,15 +2921,20 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
     // Split text into segments: regular text and plan blocks
     const segments = [];
     let lastIndex = 0;
-    const planRegex = /```plan\s*\n?([\s\S]*?)```/g;
+    const blockRegex = /```(plan|meal)\s*\n?([\s\S]*?)```/g;
     let match;
-    let planCounter = 0;
-    while ((match = planRegex.exec(text)) !== null) {
+    let planCounter = 0, mealCounter = 0;
+    while ((match = blockRegex.exec(text)) !== null) {
       if (match.index > lastIndex) segments.push({ type: "text", content: text.slice(lastIndex, match.index) });
       try {
-        const parsed = JSON.parse(match[1].trim());
-        const normalized = normalizePlan(parsed);
-        if (normalized) segments.push({ type: "plan", data: normalized, idx: planCounter++ });
+        const parsed = JSON.parse(match[2].trim());
+        if (match[1] === "plan") {
+          const normalized = normalizePlan(parsed);
+          if (normalized) segments.push({ type: "plan", data: normalized, idx: planCounter++ });
+        } else {
+          const normalized = normalizeMeal(parsed);
+          if (normalized) segments.push({ type: "meal", data: normalized, idx: mealCounter++ });
+        }
       } catch {}
       lastIndex = match.index + match[0].length;
     }
@@ -2850,6 +2944,10 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
     segments.forEach((seg, si) => {
       if (seg.type === "plan") {
         elements.push(renderPlanCard(seg.data, `plan-${seg.idx}-${seg.data.name}`));
+        return;
+      }
+      if (seg.type === "meal") {
+        elements.push(renderMealCard(seg.data, `meal-${seg.idx}-${si}`));
         return;
       }
       const lines = seg.content.split("\n");
