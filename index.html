@@ -661,11 +661,11 @@ function WorkoutTracker() {
       .filter((ex) => getExerciseInfo(ex.exerciseId))
       .map((ex) => {
         const info = getExerciseInfo(ex.exerciseId);
+        const num = (v) => String(v).replace(/[^0-9.]/g, "");
         const base = emptySet(info.type || "s");
-        if ("weight" in base && ex.weight) base.weight = String(ex.weight);
-        if ("reps" in base && ex.reps) base.reps = String(ex.reps);
-        if ("seconds" in base && ex.reps) base.seconds = String(ex.reps);
-        console.log("[Plan→Workout]", info.name, "base:", JSON.stringify(base), "plan:", JSON.stringify(ex));
+        if ("weight" in base && ex.weight) base.weight = num(ex.weight);
+        if ("reps" in base && ex.reps) base.reps = num(ex.reps);
+        if ("seconds" in base && ex.reps) base.seconds = num(ex.reps);
         return {
           exerciseId: ex.exerciseId,
           sets: Array.from({ length: ex.numSets }, () => ({ ...base, done: false })),
@@ -2653,7 +2653,8 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
 - Usa los IDs del catálogo (entre corchetes [id])
 - "weight" es string en kg, déjalo "" para ejercicios bodyweight
 - "reps" es string con un número ENTERO (ej: "10", "12", "15"). NUNCA uses rangos como "8-10" ni texto como "al fallo"
-- "weight" debe ser un número ENTERO (ej: "80", "30"). NUNCA rangos ni "BW"
+- "weight" debe ser un número ENTERO sin unidades (ej: "80", "30"). NUNCA "80kg", NUNCA rangos ni "BW"
+- "reps" NUNCA con unidades (ej: "10", NO "10s" ni "60s"). Para ejercicios de tiempo pon los segundos como número
 - "sets" debe ser un número ENTERO (ej: 3, 4)
 - Puedes generar VARIOS bloques \`\`\`plan si el usuario pide varios días/planes
 - Explica el plan en texto normal ANTES del bloque JSON
@@ -2735,11 +2736,12 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
     const rawExercises = Array.isArray(parsed.exercises) ? parsed.exercises
       : Array.isArray(parsed.ejercicios) ? parsed.ejercicios : null;
     if (!rawExercises) return null;
+    const num = (v) => String(v).replace(/[^0-9.]/g, "");
     const exercises = rawExercises.map(ex => ({
       id: resolveExerciseId(ex),
-      sets: ex.sets || ex.series || 3,
-      reps: String(ex.reps || ex.repeticiones || ""),
-      weight: String(ex.weight || ex.peso || ""),
+      sets: parseInt(ex.sets || ex.series) || 3,
+      reps: num(ex.reps || ex.repeticiones || ""),
+      weight: num(ex.weight || ex.peso || ""),
       rawName: ex.name || ex.nombre || ex.id || "?",
     })).filter(ex => ex.id);
     if (exercises.length === 0) return null;
