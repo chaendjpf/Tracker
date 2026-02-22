@@ -195,6 +195,8 @@ const ACTIVE_WORKOUT_KEY = "gym-tracker-active-workout";
 const PLANS_KEY = "gym-tracker-plans";
 const CHAT_KEY = "gym-tracker-chat";
 const GEMINI_KEY = "gym-tracker-gemini-key";
+const COACH_CONTEXT_KEY = "gym-tracker-coach-context";
+const COACH_LENGTH_KEY = "gym-tracker-coach-length";
 
 // ── FOOD DATABASE (per 100g) ──
 const FOOD_DB = [
@@ -367,6 +369,8 @@ function WorkoutTracker() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState(null);
   const [geminiKey, setGeminiKey] = useState("");
+  const [coachContext, setCoachContext] = useState("");
+  const [coachLength, setCoachLength] = useState("normal"); // conciso | normal | detallado
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
 
@@ -401,6 +405,8 @@ function WorkoutTracker() {
       try { const r = localStorage.getItem(PLANS_KEY); if (r) setPlans(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(CHAT_KEY); if (r) setChatMessages(JSON.parse(r)); } catch {}
       try { const r = localStorage.getItem(GEMINI_KEY); if (r) setGeminiKey(r); } catch {}
+      try { const r = localStorage.getItem(COACH_CONTEXT_KEY); if (r) setCoachContext(r); } catch {}
+      try { const r = localStorage.getItem(COACH_LENGTH_KEY); if (r) setCoachLength(r); } catch {}
       try { const r = localStorage.getItem(ACTIVE_WORKOUT_KEY); if (r) { const saved = JSON.parse(r); setActiveWorkout(saved.workout); setView(saved.view); } } catch {}
       setLoaded(true);
     })();
@@ -415,6 +421,8 @@ function WorkoutTracker() {
   useEffect(() => { if (loaded) { try { localStorage.setItem(PLANS_KEY, JSON.stringify(plans)); } catch {} } }, [plans, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(CHAT_KEY, JSON.stringify(chatMessages)); } catch {} } }, [chatMessages, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(GEMINI_KEY, geminiKey); } catch {} } }, [geminiKey, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(COACH_CONTEXT_KEY, coachContext); } catch {} } }, [coachContext, loaded]);
+  useEffect(() => { if (loaded) { try { localStorage.setItem(COACH_LENGTH_KEY, coachLength); } catch {} } }, [coachLength, loaded]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, chatLoading]);
   useEffect(() => { if (view === "coach") setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "auto" }), 50); }, [view]);
   useEffect(() => { if (!loaded) return; try { if (activeWorkout) { localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ workout: activeWorkout, view })); } else { localStorage.removeItem(ACTIVE_WORKOUT_KEY); } } catch {} }, [activeWorkout, view, loaded]);
@@ -431,6 +439,8 @@ function WorkoutTracker() {
       customFoods,
       chatMessages,
       geminiKey,
+      coachContext,
+      coachLength,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -456,6 +466,8 @@ function WorkoutTracker() {
         if (data.customFoods) setCustomFoods(data.customFoods);
         if (data.chatMessages) setChatMessages(data.chatMessages);
         if (data.geminiKey) setGeminiKey(data.geminiKey);
+        if (data.coachContext) setCoachContext(data.coachContext);
+        if (data.coachLength) setCoachLength(data.coachLength);
         setNutView("summary");
         alert("Datos restaurados correctamente");
       } catch { alert("Error al leer el archivo de backup"); }
@@ -2611,7 +2623,11 @@ function WorkoutTracker() {
         s + (ex.sets || []).reduce((ss, set) =>
           ss + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0), 0), 0);
 
+    const lengthInstr = { conciso: "Responde de forma MUY breve y directa, máximo 2-3 párrafos cortos. Ve al grano sin rodeos.", normal: "Responde de forma concisa pero completa, sin excederte.", detallado: "Puedes extenderte y dar explicaciones detalladas cuando sea útil." }[coachLength] || "";
+
     return `Eres un entrenador personal y nutricionista deportivo experto. Hablas en español, eres motivador, directo y práctico. Tuteas al usuario.
+${lengthInstr}
+${coachContext ? `\nCONTEXTO DEL USUARIO (IMPORTANTE, tenlo siempre en cuenta):\n${coachContext}\n` : ""}
 
 CATÁLOGO DE EJERCICIOS DISPONIBLES (usa SOLO estos nombres al proponer ejercicios):
 ${catalog}
@@ -3070,8 +3086,51 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
           <div style={{ fontSize: 12, color: C.success, marginTop: 8, fontWeight: 600 }}>✓ API Key configurada</div>
         )}
       </div>
-      <p style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 4, marginBottom: 28 }}>
+      <p style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 4, marginBottom: 16 }}>
         Obtén tu key gratis en <span style={{ color: C.accent }}>aistudio.google.com</span>
+      </p>
+
+      <div style={{ ...baseCard, padding: 16, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: C.textDim, marginBottom: 6 }}>Tu contexto personal</div>
+        <textarea
+          value={coachContext}
+          onChange={e => setCoachContext(e.target.value)}
+          placeholder="Describe tu perfil, objetivos, lesiones, preferencias... El Coach lo tendrá siempre en cuenta."
+          rows={4}
+          style={{
+            width: "100%", padding: "12px", borderRadius: 10,
+            border: `1px solid ${C.border}`, background: C.bg, color: C.text,
+            fontSize: 13, outline: "none", fontFamily: fontBody,
+            resize: "vertical", lineHeight: 1.5, boxSizing: "border-box",
+          }}
+        />
+        {coachContext && (
+          <div style={{ fontSize: 11, color: C.success, marginTop: 6 }}>✓ {coachContext.length} caracteres</div>
+        )}
+      </div>
+
+      <div style={{ ...baseCard, padding: 16, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: C.textDim, marginBottom: 10 }}>Extensión de las respuestas</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { id: "conciso", label: "Conciso" },
+            { id: "normal", label: "Normal" },
+            { id: "detallado", label: "Detallado" },
+          ].map(opt => (
+            <button key={opt.id} onClick={() => setCoachLength(opt.id)}
+              style={{
+                flex: 1, padding: "10px 8px", borderRadius: 10, border: "none",
+                background: coachLength === opt.id ? C.accent : `rgba(255,255,255,0.06)`,
+                color: coachLength === opt.id ? "#fff" : C.textDim,
+                fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p style={{ fontSize: 11, color: C.textDim, textAlign: "center", marginTop: 4, marginBottom: 28 }}>
+        El contexto y la extensión se aplican a todas las conversaciones del Coach.
       </p>
 
       {/* Backup / Restaurar */}
