@@ -662,8 +662,10 @@ function WorkoutTracker() {
       .map((ex) => {
         const info = getExerciseInfo(ex.exerciseId);
         const base = emptySet(info.type || "s");
-        if (ex.weight) base.weight = ex.weight;
-        if (ex.reps) base.reps = ex.reps;
+        if ("weight" in base && ex.weight) base.weight = String(ex.weight);
+        if ("reps" in base && ex.reps) base.reps = String(ex.reps);
+        if ("seconds" in base && ex.reps) base.seconds = String(ex.reps);
+        console.log("[Plan→Workout]", info.name, "base:", JSON.stringify(base), "plan:", JSON.stringify(ex));
         return {
           exerciseId: ex.exerciseId,
           sets: Array.from({ length: ex.numSets }, () => ({ ...base, done: false })),
