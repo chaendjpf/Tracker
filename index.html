@@ -2862,27 +2862,28 @@ INSTRUCCIONES:
           boxSizing: "border-box",
         }}>
           <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="text"
+            <textarea
               value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !chatLoading) { e.preventDefault(); sendToGemini(chatInput); } }}
+              onChange={e => { setChatInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !chatLoading && chatInput.trim()) { e.preventDefault(); sendToGemini(chatInput); } }}
               placeholder="Pregunta a tu coach..."
+              rows={1}
               style={{
                 flex: 1, padding: "12px 16px", borderRadius: 14,
                 border: `1px solid ${C.border}`, background: C.card, color: C.text,
                 fontSize: 14, outline: "none", fontFamily: fontBody,
+                resize: "none", lineHeight: 1.4, maxHeight: 120, overflowY: "auto",
               }}
             />
             <button
               onClick={() => sendToGemini(chatInput)}
               disabled={chatLoading || !chatInput.trim()}
               style={{
-                width: 46, height: 46, borderRadius: 14, border: "none",
+                width: 46, minHeight: 46, borderRadius: 14, border: "none",
                 background: chatInput.trim() && !chatLoading ? C.accent : C.border,
                 color: "#fff", fontSize: 18, cursor: chatInput.trim() && !chatLoading ? "pointer" : "default",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "background 0.2s",
+                transition: "background 0.2s", alignSelf: "flex-end",
               }}
             >
               ➤
