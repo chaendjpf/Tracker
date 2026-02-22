@@ -416,6 +416,7 @@ function WorkoutTracker() {
   useEffect(() => { if (loaded) { try { localStorage.setItem(CHAT_KEY, JSON.stringify(chatMessages)); } catch {} } }, [chatMessages, loaded]);
   useEffect(() => { if (loaded) { try { localStorage.setItem(GEMINI_KEY, geminiKey); } catch {} } }, [geminiKey, loaded]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, chatLoading]);
+  useEffect(() => { if (view === "coach") setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "auto" }), 50); }, [view]);
   useEffect(() => { if (!loaded) return; try { if (activeWorkout) { localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ workout: activeWorkout, view })); } else { localStorage.removeItem(ACTIVE_WORKOUT_KEY); } } catch {} }, [activeWorkout, view, loaded]);
 
   const backupAllData = () => {
