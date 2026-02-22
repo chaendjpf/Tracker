@@ -2667,7 +2667,7 @@ INSTRUCCIONES:
       const payload = {
         systemInstruction: { parts: [{ text: sysPrompt }] },
         contents,
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
       };
       console.log(`[Coach] System prompt: ~${Math.round(sysPrompt.length / 4)} tokens, Messages: ${contents.length}, Payload: ~${Math.round(JSON.stringify(payload).length / 4)} tokens`);
 
