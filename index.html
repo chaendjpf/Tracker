@@ -2663,22 +2663,22 @@ INSTRUCCIONES:
         parts: [{ text: m.text }],
       }));
 
+      const sysPrompt = buildSystemPrompt();
+      const payload = {
+        systemInstruction: { parts: [{ text: sysPrompt }] },
+        contents,
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+      };
+      console.log(`[Coach] System prompt: ~${Math.round(sysPrompt.length / 4)} tokens, Messages: ${contents.length}, Payload: ~${Math.round(JSON.stringify(payload).length / 4)} tokens`);
+
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
-            contents,
-            generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-          }),
-        }
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
       );
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        if (res.status === 429) throw new Error("Límite de peticiones alcanzado. Espera un momento.");
+        if (res.status === 429) throw new Error("Rate limit: " + (errData.error?.message || "Espera un momento y reintenta"));
         throw new Error(errData.error?.message || `Error ${res.status}`);
       }
 
