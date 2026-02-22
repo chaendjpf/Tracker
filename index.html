@@ -2917,7 +2917,7 @@ Cuando el usuario te diga lo que ha comido (ej: "He comido 200g de pollo con arr
     );
   };
 
-  const renderMarkdown = (text) => {
+  const renderMarkdown = (text, msgIdx = 0) => {
     // Split text into segments: regular text and plan blocks
     const segments = [];
     let lastIndex = 0;
@@ -2943,11 +2943,11 @@ Cuando el usuario te diga lo que ha comido (ej: "He comido 200g de pollo con arr
     const elements = [];
     segments.forEach((seg, si) => {
       if (seg.type === "plan") {
-        elements.push(renderPlanCard(seg.data, `plan-${seg.idx}-${seg.data.name}`));
+        elements.push(renderPlanCard(seg.data, `plan-${msgIdx}-${seg.idx}-${seg.data.name}`));
         return;
       }
       if (seg.type === "meal") {
-        elements.push(renderMealCard(seg.data, `meal-${seg.idx}-${si}`));
+        elements.push(renderMealCard(seg.data, `meal-${msgIdx}-${seg.idx}`));
         return;
       }
       const lines = seg.content.split("\n");
@@ -3066,7 +3066,7 @@ Cuando el usuario te diga lo que ha comido (ej: "He comido 200g de pollo con arr
                     color: msg.role === "user" ? "#fff" : C.text,
                     fontSize: 13, lineHeight: 1.5,
                   }}>
-                    {msg.role === "user" ? msg.text : renderMarkdown(msg.text)}
+                    {msg.role === "user" ? msg.text : renderMarkdown(msg.text, i)}
                   </div>
                 </div>
               ))}
