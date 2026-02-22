@@ -2649,7 +2649,9 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
 \`\`\`
 - Usa los IDs del catálogo (entre corchetes [id])
 - "weight" es string en kg, déjalo "" para ejercicios bodyweight
-- "reps" es string
+- "reps" es string con un número ENTERO (ej: "10", "12", "15"). NUNCA uses rangos como "8-10" ni texto como "al fallo"
+- "weight" debe ser un número ENTERO (ej: "80", "30"). NUNCA rangos ni "BW"
+- "sets" debe ser un número ENTERO (ej: 3, 4)
 - Puedes generar VARIOS bloques \`\`\`plan si el usuario pide varios días/planes
 - Explica el plan en texto normal ANTES del bloque JSON
 - Si el usuario pide un plan semanal con varios días, genera un bloque \`\`\`plan por cada día`;
