@@ -437,6 +437,7 @@ function WorkoutTracker() {
       nutSettings,
       customExercises,
       customFoods,
+      plans,
       chatMessages,
       geminiKey,
       coachContext,
@@ -464,6 +465,7 @@ function WorkoutTracker() {
         if (data.nutSettings) setNutSettings(data.nutSettings);
         if (data.customExercises) setCustomExercises(data.customExercises);
         if (data.customFoods) setCustomFoods(data.customFoods);
+        if (data.plans) setPlans(data.plans);
         if (data.chatMessages) setChatMessages(data.chatMessages);
         if (data.geminiKey) setGeminiKey(data.geminiKey);
         if (data.coachContext) setCoachContext(data.coachContext);
