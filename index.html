@@ -2572,7 +2572,7 @@ function WorkoutTracker() {
 
     // Plans
     const plansSummary = plans.length > 0
-      ? plans.map(p => `"${p.name}": ${p.days.map(d => d.name || "Día").join(", ")}`).join("\n")
+      ? plans.map(p => `"${p.name}": ${(p.exercises || []).map(ex => { const info = getExerciseInfo(ex.exerciseId); return info ? info.name : ex.exerciseId; }).join(", ")}`).join("\n")
       : "Sin planes guardados";
 
     // Nutrition last 7 days
