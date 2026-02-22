@@ -368,6 +368,7 @@ function WorkoutTracker() {
   const [chatError, setChatError] = useState(null);
   const [geminiKey, setGeminiKey] = useState("");
   const chatEndRef = useRef(null);
+  const chatInputRef = useRef(null);
 
   const EXERCISES = useMemo(() => {
     const merged = {};
@@ -2665,6 +2666,7 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
     const userMsg = { role: "user", text: trimmed, ts: Date.now() };
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput("");
+    if (chatInputRef.current) chatInputRef.current.style.height = "auto";
     setChatLoading(true);
     setChatError(null);
 
@@ -2985,6 +2987,7 @@ Cuando el usuario te pida crear/proponer un plan, rutina o entrenamiento, SIEMPR
         }}>
           <div style={{ display: "flex", gap: 8 }}>
             <textarea
+              ref={chatInputRef}
               value={chatInput}
               onChange={e => { setChatInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !chatLoading && chatInput.trim()) { e.preventDefault(); sendToGemini(chatInput); } }}
